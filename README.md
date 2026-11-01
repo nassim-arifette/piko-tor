@@ -8,7 +8,7 @@ synchronization is not included in this release.
 - [Patch bundle and companion APK](https://github.com/nassim-arifette/piko/releases/tag/v3.9.0-tor.1)
 - [Installation, limitations and build instructions](companion/README.md)
 
-Use this source instead of upstream Piko for X; do not apply duplicate patches.
+Use this source instead of upstream Piko for X, do not apply duplicate patches.
 Leave the source's **Use pre-release** toggle off: this fork's experimental
 manifest is on `main`, not `dev`. Enable **Tor network companion** in expert mode.
 Morphe does not install the companion from the bundle; X offers its download when
