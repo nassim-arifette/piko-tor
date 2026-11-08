@@ -6,9 +6,22 @@ version `3.10.0-tor.1-dev.1`.
 
 The published experimental release remains **3.9.0-tor.2**, based on Piko 3.9.0.
 `patches-bundle.json` intentionally still points to that existing release, so adding
-this source to Morphe does not install the unpublished 3.10.0-based code. The dated
-Tor validation evidence in the companion documentation applies to the earlier code
-tested there; it does not validate this synchronization.
+this source to Morphe does not install the unpublished 3.10.0-based code.
+
+Validation on **2026-11-08** passed the companion build for all four ABIs, 17 unit
+tests, lint, APK alignment/signature checks, and real Morphe patching of X with
+both Tor alone and 71 existing patch selections plus Tor. The
+[full CI run](https://github.com/nassim-arifette/piko-tor/actions/runs/42499335203)
+also passed bounded Android 15 network tests: real Tor egress, blocking during an
+engine pause and a short process-kill window, and recovery. These diagnostic-app
+results do not establish exhaustive leak prevention or normal operation of
+authenticated X. See the [dated validation report](docs/validation/2026-11-08-piko-tor.md)
+for the tested revisions, measured scope and remaining checks.
+
+The development bundle was also applied with the existing Morphe key on an
+Android 14 Xiaomi: X 12.19.1 and the companion installed successfully, and the Tor
+settings opened and associated the companion. The VPN was left stopped; this
+installation check does not demonstrate authenticated X traffic through Tor.
 
 - [Add this fork to Morphe](https://morphe.software/add-source?github=nassim-arifette/piko-tor&name=Piko%20Tor%20experimental)
 - [Published patch bundle and companion APK](https://github.com/nassim-arifette/piko-tor/releases/tag/v3.9.0-tor.2)
@@ -20,6 +33,14 @@ manifest is on `main`, not `dev`. Enable **Tor network companion** in expert mod
 Morphe does not install the companion from the bundle; X offers its download when
 missing. No prepatched X APK is distributed. The automatic stable-release workflow
 is restricted to upstream; this fork publishes explicit experimental releases.
+
+Android permits one VPN per profile. The current **unpublished development source**
+checks for another visible VPN before requesting consent and rechecks permission
+after the consent dialog. The published **3.9.0-tor.2 companion lacks these safeguards**.
+Android can hide per-app VPNs even from the development guard. Check Android's VPN
+settings before starting; no complete provider detection is guaranteed. Strict
+operation also requires manually enabled **Always-on VPN** and
+**Block connections without VPN**, which can block other apps in the same profile.
 
 The upstream usage and catalogue below describe inherited Piko functionality,
 not completed Tor security validation.
