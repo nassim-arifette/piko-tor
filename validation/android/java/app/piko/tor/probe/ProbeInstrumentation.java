@@ -2,11 +2,19 @@ package app.piko.tor.probe;
 
 import android.app.Activity;
 import android.app.Instrumentation;
+import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.content.pm.Signature;
+import android.net.ConnectivityManager;
+import android.net.LinkProperties;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.net.RouteInfo;
 import android.os.Bundle;
 import android.os.Process;
+import android.system.ErrnoException;
+import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -47,6 +55,38 @@ public final class ProbeInstrumentation extends Instrumentation {
                 StringBuilder hex = new StringBuilder();
                 for (byte value : digest) hex.append(String.format(java.util.Locale.ROOT, "%02x", value & 255));
                 result.put("package", context.getPackageName()).put("certificate", hex.toString());
+            } else if ("network".equals(operation)) {
+                Context context = getTargetContext();
+                result.put("internet_permission", context.checkSelfPermission(Manifest.permission.INTERNET)
+                        == PackageManager.PERMISSION_GRANTED);
+                result.put("target_sdk", context.getApplicationInfo().targetSdkVersion);
+                ConnectivityManager connectivity = context.getSystemService(ConnectivityManager.class);
+                Network active = connectivity.getActiveNetwork();
+                result.put("active_network", active != null);
+                NetworkCapabilities capabilities = active == null ? null : connectivity.getNetworkCapabilities(active);
+                if (capabilities != null) {
+                    result.put("internet_capability", capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET));
+                    result.put("validated", capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED));
+                    result.put("not_restricted", capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED));
+                    result.put("vpn_transport", capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN));
+                    result.put("wifi_transport", capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI));
+                    result.put("ethernet_transport", capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET));
+                }
+                LinkProperties links = active == null ? null : connectivity.getLinkProperties(active);
+                if (links != null) {
+                    result.put("interface", links.getInterfaceName());
+                    result.put("private_dns_active", links.isPrivateDnsActive());
+                    result.put("private_dns_hostname_configured", links.getPrivateDnsServerName() != null);
+                    result.put("dns_server_count", links.getDnsServers().size());
+                    int default4 = 0, default6 = 0;
+                    for (RouteInfo route : links.getRoutes()) {
+                        if (route.isDefaultRoute()) {
+                            if (route.getDestination().getAddress() instanceof Inet4Address) default4++;
+                            if (route.getDestination().getAddress() instanceof Inet6Address) default6++;
+                        }
+                    }
+                    result.put("ipv4_default_routes", default4).put("ipv6_default_routes", default6);
+                }
             } else if ("tor".equals(operation)) {
                 HttpsURLConnection connection = (HttpsURLConnection) new URL(
                         "https://check.torproject.org/api/ip").openConnection();
@@ -132,7 +172,24 @@ public final class ProbeInstrumentation extends Instrumentation {
             } else throw new IllegalArgumentException("Unknown operation");
             result.put("success", true);
         } catch (Exception error) {
-            try { result.put("success", false).put("error_type", error.getClass().getSimpleName()); }
+            try {
+                result.put("success", false).put("error_type", error.getClass().getSimpleName());
+                JSONArray causes = new JSONArray();
+                Throwable cause = error;
+                for (int depth = 0; cause != null && depth < 5; depth++, cause = cause.getCause()) {
+                    JSONObject detail = new JSONObject().put("type", cause.getClass().getSimpleName());
+                    if (cause instanceof ErrnoException) detail.put("errno", ((ErrnoException) cause).errno);
+                    String message = cause.getMessage();
+                    if (message != null) {
+                        message = message.replaceAll("\\b(?:[0-9]{1,3}\\.){3}[0-9]{1,3}\\b", "<IPv4>")
+                                .replaceAll("(?i)(?:[0-9a-f]{0,4}:){2,}[0-9a-f:.%]*", "<IPv6>")
+                                .replaceAll("piko-[a-f0-9]{32}", "<probe-token>");
+                        detail.put("message", message.substring(0, Math.min(240, message.length())));
+                    }
+                    causes.put(detail);
+                }
+                result.put("error_causes", causes);
+            }
             catch (Exception ignored) { }
         }
         try { result.put("elapsed_ms", android.os.SystemClock.elapsedRealtime() - before); }

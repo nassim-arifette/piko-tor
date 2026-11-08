@@ -279,7 +279,7 @@ def main() -> int:
                              "fingerprint": device.shell("getprop", "ro.build.fingerprint")}
         for key in ("private_dns_mode", "private_dns_specifier"):
             original_dns[key] = device.shell("settings", "get", "global", key)
-        device.shell("settings", "put", "global", "private_dns_mode", "opportunistic")
+        device.shell("settings", "put", "global", "private_dns_mode", "off")
         for apk in (args.companion, args.fixtures / "probe.apk"):
             device.run("install", "-r", str(apk.resolve()), timeout=120)
         device.run("push", str((args.fixtures / "vpn-setup.zip").resolve()), SETUP)
@@ -293,6 +293,8 @@ def main() -> int:
         report["identities"] = {"probe": identity, "companion_uid": companion_uid,
                                 "companion_apk_sha256": sha256(args.companion),
                                 "probe_apk_sha256": sha256(args.fixtures / "probe.apk")}
+        report["network_before_readiness"] = device.probe("network")
+        report["probe_run_as_identity"] = device.shell("run-as", PROBE, "id")
         echo = Echo()
         counters = Counters(device, device.probe_uid)
 
@@ -314,6 +316,15 @@ def main() -> int:
                 require_blocked(entry)
             return entry
 
+        readiness_attempts = 0
+        def direct_ready():
+            nonlocal readiness_attempts
+            readiness_attempts += 1
+            entry = measure("direct_readiness_" + str(readiness_attempts), ["dns", "tcp4", "local_tcp", "udp"])
+            entry["network"] = device.probe("network")
+            return all(item.get("success") and item.get("host_received", 1) == 1
+                       for item in entry["results"])
+        wait_for(direct_ready, 90, "direct DNS, TCP and UDP positive controls before VPN setup")
         baseline = measure("direct_positive_controls", ["tor", "dns", "tcp4", "tcp6", "local_tcp", "udp"])
         controls = {item["operation"]: item for item in baseline["results"]}
         for operation in ("tor", "dns", "tcp4", "local_tcp", "udp"):
@@ -383,7 +394,7 @@ def main() -> int:
         paused["retained_tun_ifindices"] = original_tun
         if device.tun_identity() != original_tun or not device.vpn("status"):
             raise Regression("Paused-engine measurement did not retain its TUN and lockdown")
-        device.shell("settings", "put", "global", "private_dns_mode", "opportunistic")
+        device.shell("settings", "put", "global", "private_dns_mode", "off")
         device.shell("settings", "delete", "global", "private_dns_specifier")
         healthy("recovery_after_engine_pause")
 

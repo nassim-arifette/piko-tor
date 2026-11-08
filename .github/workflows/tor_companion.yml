@@ -161,7 +161,7 @@ jobs:
           arch: x86_64
           ram-size: 2048M
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot -dns-server 1.1.1.1,8.8.8.8
           script: python3 validation/android/run-network-checks.py --serial emulator-5554 --companion companion/build/outputs/apk/debug/companion-debug.apk --output validation/android/artifacts
       - name: Upload bounded network evidence
         if: always()

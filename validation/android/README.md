@@ -43,6 +43,16 @@ also refuses an existing TUN or always-on configuration before making changes.
 
 ## Evidence and decision rules
 
+Before enabling the VPN, the runner disables Private DNS on this disposable
+emulator and retries the direct DNS, public TCP and local TCP/UDP controls until
+a 90-second deadline. Attempts and independent host receptions are retained;
+the final baseline must still pass every required control. A failed baseline is
+incomplete validation, never a successful blocking test. The report includes
+the probe's default-network capabilities, DNS-server count, default-route counts,
+INTERNET permission and sanitized exception causes/errno values to diagnose
+emulator setup failures. Private DNS returns to `off` after the strict-DNS pause,
+and the runner restores the emulator's original settings during cleanup.
+
 1. **Direct positive controls.** The probe's own UID must reach the HTTPS Tor
    check and receive `IsTor=false`, resolve its name, open IPv4 TCP, and receive
    TCP/UDP echoes from the runner through emulator host alias `10.0.2.2`.
