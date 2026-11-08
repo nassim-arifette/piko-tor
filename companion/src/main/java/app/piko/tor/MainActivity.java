@@ -134,13 +134,36 @@ public final class MainActivity extends Activity {
     private void prepareVpn() {
         if (!TargetConfig.load(this).valid(this)) { showError(R.string.target_invalid); return; }
         Intent consent = VpnService.prepare(this);
+        if (consent != null && VpnConflict.hasVisibleVpn(this)) {
+            showVpnConflict();
+            return;
+        }
         if (consent == null) send(TorVpnService.START);
         else startActivityForResult(consent, VPN_CONSENT);
     }
 
+    private void showVpnConflict() {
+        showDialog(new AlertDialog.Builder(this)
+                .setTitle(R.string.vpn_conflict_title)
+                .setMessage(R.string.vpn_conflict_message)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.system_settings,
+                        (dialog, which) -> startActivity(new Intent(Settings.ACTION_VPN_SETTINGS)))
+                .create());
+    }
+
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
-        if (request == VPN_CONSENT && result == RESULT_OK) send(TorVpnService.START);
+        if (request == VPN_CONSENT && result == RESULT_OK) {
+            // Another provider may have been selected while the consent UI was open.
+            // Do not ask again or take it over as a side effect of an old result.
+            if (VpnService.prepare(this) != null) {
+                showError(R.string.vpn_consent_changed);
+                return;
+            }
+            if (!TargetConfig.load(this).valid(this)) { showError(R.string.target_invalid); return; }
+            send(TorVpnService.START);
+        }
     }
 
     private void send(String action) {

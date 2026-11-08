@@ -9,7 +9,10 @@
     <string name="target_invalid">No trusted target. Associate the installed patched X app with a different Android UID.</string>
     <string name="start_vpn">Prepare VPN and start Tor</string>
     <string name="system_settings">Open Android VPN settings</string>
-    <string name="configuration_warning">First consent to the VPN, then enable Always-on VPN and Block connections without VPN for Piko Tor in Android settings. Tor will not start until both are detected. Do not use X during setup. Only one VPN can run per profile. Other apps in this profile may lose Internet access; consider a dedicated profile for X. A tunnel alone is not a kill switch.</string>
+    <string name="configuration_warning">Only one VPN can run per Android profile. If you already use a VPN, keep it active unless you deliberately choose to replace it with Piko Tor. Android may hide VPNs that exclude this app; accepting its VPN permission can replace your existing VPN.\n\nFirst consent to the VPN, then enable Always-on VPN and Block connections without VPN for Piko Tor in Android settings. Tor will not start until both are detected. Do not use X during setup. Other apps in this profile may lose Internet access; consider a dedicated profile for X. A tunnel alone is not a kill switch.</string>
+    <string name="vpn_conflict_title">Another VPN is active</string>
+    <string name="vpn_conflict_message">Piko Tor has not started or replaced your VPN. Android allows one VPN per profile. Keep your current VPN, or open Android VPN settings to choose which provider you want to use. Piko Tor does not send X through Tor while another provider is selected.</string>
+    <string name="vpn_consent_changed">VPN permission changed before Piko Tor could start. Your selected VPN has not been replaced by this action. Check Android VPN settings before trying again.</string>
     <string name="refresh_tor">Retry Tor / refresh circuits</string>
     <string name="stop_vpn">Stop Piko Tor</string>
     <string name="stop_warning">Stopping closes this tunnel. Android lockdown is NOT disabled by this action: keep it on to block X. If you disable lockdown, revoke VPN permission or uninstall Piko Tor, X may connect directly and reveal your IP. Android may restart an always-on VPN.</string>

@@ -6,9 +6,19 @@ on:
     branches: [main, dev]
     paths:
       - 'companion/**'
+      - 'extensions/twitter/src/main/java/app/morphe/extension/twitter/settings/**'
+      - 'patches/src/main/kotlin/app/crimera/patches/twitter/misc/tor/**'
+      - 'patches/src/main/kotlin/app/crimera/patches/twitter/misc/settings/**'
+      - 'patches/src/main/kotlin/app/crimera/patches/twitter/misc/extension/**'
+      - 'patches/src/main/kotlin/app/crimera/patches/twitter/utils/**'
+      - 'patches/src/main/resources/addresources/**/twitter/**'
+      - 'patches/src/main/resources/twitter/settings/**'
       - 'scripts/**'
       - 'gradle/**'
-      - 'settings.gradle.kts'
+      - '**/*.gradle.kts'
+      - 'gradle.properties'
+      - 'gradlew'
+      - 'gradlew.bat'
       - '.github/workflows/tor_companion.yml'
 
 permissions:
@@ -33,11 +43,27 @@ jobs:
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
       - name: Build and verify all native ABIs and notices
         run: scripts/build-tor-native.sh
-      - name: Compile APK, unit tests and lint
+      - name: Build patch bundle and APK, run unit tests and lint
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./gradlew --no-daemon :companion:assembleDebug :companion:testDebugUnitTest :companion:lintDebug
+        run: ./gradlew --no-daemon buildAndroid :companion:assembleDebug :companion:testDebugUnitTest :companion:lintDebug
       - name: Check APK alignment and signature
         run: |
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 companion/build/outputs/apk/debug/companion-debug.apk
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify companion/build/outputs/apk/debug/companion-debug.apk
+      - name: Upload validation artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: piko-tor-validation-${{ github.sha }}
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            patches/build/libs/*.mpp
+            patches/build/reports/tests/
+            patches/build/test-results/
+            companion/build/outputs/apk/debug/*.apk
+            companion/build/reports/
+            companion/build/test-results/
+            companion/build/generated/jniLibs/
+            companion/build/generated/assets/licenses/

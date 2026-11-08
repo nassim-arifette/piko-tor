@@ -1,11 +1,17 @@
 ## Experimental Piko Tor
 
-**Still experimental** This fork adds
-an optional Tor companion patch for X, based on Piko 3.9.0. The upstream 3.10.0
-synchronization is not included in this release.
+**Still experimental.** This fork adds an optional Tor companion patch for X.
+The current source includes upstream Piko 3.10.0 and has the unpublished development
+version `3.10.0-tor.1-dev.1`.
 
-- [Add this fork to Morphe](https://morphe.software/add-source?github=nassim-arifette/piko&name=Piko%20Tor%20experimental)
-- [Patch bundle and companion APK](https://github.com/nassim-arifette/piko/releases/tag/v3.9.0-tor.1)
+The published experimental release remains **3.9.0-tor.2**, based on Piko 3.9.0.
+`patches-bundle.json` intentionally still points to that existing release, so adding
+this source to Morphe does not install the unpublished 3.10.0-based code. The dated
+Tor validation evidence in the companion documentation applies to the earlier code
+tested there; it does not validate this synchronization.
+
+- [Add this fork to Morphe](https://morphe.software/add-source?github=nassim-arifette/piko-tor&name=Piko%20Tor%20experimental)
+- [Published patch bundle and companion APK](https://github.com/nassim-arifette/piko-tor/releases/tag/v3.9.0-tor.2)
 - [Installation, limitations and build instructions](companion/README.md)
 
 Use this source instead of upstream Piko for X, do not apply duplicate patches.

@@ -23,7 +23,7 @@ import app.morphe.extension.crimera.PikoUtils;
 
 public final class TorCompanion {
     private static final String PACKAGE = "app.piko.tor";
-    private static final String DOWNLOAD_URL = "https://github.com/nassim-arifette/piko/releases/download/v3.9.0-tor.2/piko-tor-0.1.0-experimental.apk";
+    private static final String DOWNLOAD_URL = "https://github.com/nassim-arifette/piko-tor/releases/download/v3.9.0-tor.2/piko-tor-0.1.0-experimental.apk";
 
     private TorCompanion() {}
 

@@ -3,6 +3,13 @@
 **Not validated for sensitive use. There is no “protected” indicator.** Building an APK,
 an open TUN, or Arti's bootstrap-ready event does not prove that X cannot leak traffic.
 
+The current source includes upstream Piko 3.10.0 and uses the unpublished development
+version `3.10.0-tor.1-dev.1`. The published patch bundle remains `3.9.0-tor.2`, based
+on Piko 3.9.0, with companion APK `0.1.0-experimental`. `patches-bundle.json` still
+selects that existing release for Morphe; it does not distribute the current source.
+The dated validation evidence below describes earlier builds, not validation of
+the 3.10.0 synchronization.
+
 ## Architecture and boundaries
 
 - X + the optional **Tor network companion** Morphe patch: a settings section and an
@@ -37,22 +44,22 @@ worker exits; a subsequent start reloads the selected identity.
 
 ## Setup on a test device
 
-[Add this fork to Morphe](https://morphe.software/add-source?github=nassim-arifette/piko&name=Piko%20Tor%20experimental)
+[Add this fork to Morphe](https://morphe.software/add-source?github=nassim-arifette/piko-tor&name=Piko%20Tor%20experimental)
 or import `patches-3.9.0-tor.2.mpp` from the
-[experimental release](https://github.com/nassim-arifette/piko/releases/tag/v3.9.0-tor.2).
+[published experimental release](https://github.com/nassim-arifette/piko-tor/releases/tag/v3.9.0-tor.2).
 Leave the source's **Use pre-release** toggle off: Morphe switches that toggle to
 `dev`, but this fork publishes its experimental manifest on `main`. Use this
 source instead of upstream Piko for X to avoid duplicate patches. In expert mode,
 enable **Tor network companion** and provide your original X 12.19.1-release.0 APKM.
 
 When the companion is missing, X offers **Download Piko Tor**. An explicit
-confirmation opens the version-matched GitHub APK in an external handler; Android
+confirmation opens the companion APK from `v3.9.0-tor.2` in an external handler; Android
 still requires installation consent. Installed companions open the existing
 pairing/setup screen. No background download, installer permission, automatic
 installation or weakening of lockdown is added. If lockdown blocks the browser,
 transfer the APK from another device instead of disabling lockdown.
 
-This release uses debug signing for the companion and has no detached publisher
+The published release uses debug signing for the companion and has no detached publisher
 signature for the bundle. SHA-256 checksums detect mismatched files, not an
 independent publisher identity. The release tag provides the Piko source; pinned
 native source revisions and build instructions are below. No prepatched X APK is
@@ -125,7 +132,7 @@ To apply only the new optional patch to the supported X bundle (Morphe Desktop
 
 ```sh
 java -jar morphe-desktop-1.18.1-all.jar patch --exclusive \
-  -p patches/build/libs/patches-3.9.0-tor.2.mpp -e 'Tor network companion' \
+  -p patches/build/libs/patches-3.10.0-tor.1-dev.1.mpp -e 'Tor network companion' \
   -o x-piko-tor.apk X-12.19.1-release.0.apkm
 ```
 
@@ -134,7 +141,8 @@ patches are intentionally excluded from this smoke check, not declared compatibl
 
 ## Validation evidence and remaining gates
 
-Executed in the development VM (2026-10-19):
+Historical results from the development VM (2026-10-19), before the upstream
+3.10.0 synchronization. These are not results from the current development version:
 
 - `buildAndroid`; companion Java compilation, debug APK assembly and Android lint.
 - JUnit state-policy checks, including all 512 combinations of nine prerequisite
@@ -150,7 +158,7 @@ Executed in the development VM (2026-10-19):
 
 ### Android runtime checks (2026-10-19)
 
-Final runtime code revision: `4602d80a`. Companion debug APK SHA-256:
+Runtime code revision tested on that date: `4602d80a`. Companion debug APK SHA-256:
 `4ae13fd75fcbeb6e9c9a1b730680eaabb78866777ebb2dbc54d053bfab7825bf`.
 Android 15/API 35 Google APIs x86_64 emulator, fingerprint
 `google/sdk_gphone64_x86_64/emu64xa:15/AE3A.240806.043/12960925:userdebug/dev-keys`.
@@ -194,7 +202,7 @@ comprehensive WebView/native/auxiliary/isolated-process coverage, real QUIC or e
 UDP destinations, replacement identity invalidation, provider change/uninstall,
 background/battery restrictions, battery/memory/latency, physical devices and
 non-regression of other patches. Runtime evidence and recording are linked from
-[the draft PR](https://github.com/nassim-arifette/piko/pull/1) and its Devin session.
+[the original PR](https://github.com/nassim-arifette/piko-tor/pull/1) and its Devin session.
 
 Before describing a tested scenario as protected, run it with independent packet
 capture (including DNS and IPv6), record the target's real UID and Android lockdown
