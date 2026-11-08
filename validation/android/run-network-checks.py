@@ -51,7 +51,7 @@ class Device:
 
     def tun(self) -> list[str]:
         return sorted(name for name in self.shell("ls", "/sys/class/net").split()
-                      if name.startswith("tun"))
+                      if re.fullmatch(r"tun\d+", name))
 
     def tun_identity(self) -> dict[str, int]:
         result = {}
@@ -262,7 +262,14 @@ def main() -> int:
             raise Incomplete("Refusing non-emulator device")
         if device.shell("getprop", "ro.build.type") not in {"userdebug", "eng"}:
             raise Incomplete("A rootable userdebug/eng test image is required")
-        if device.shell("settings", "get", "secure", "always_on_vpn_app") not in {"", "null"} or device.tun():
+        existing_always_on = device.shell("settings", "get", "secure", "always_on_vpn_app")
+        initial_tuns = device.tun()
+        report["preflight"] = {
+            "always_on_vpn_app": existing_always_on,
+            "interfaces": device.shell("ls", "/sys/class/net").split(),
+            "vpn_tun_interfaces": initial_tuns,
+        }
+        if existing_always_on not in {"", "null"} or initial_tuns:
             raise Incomplete("Use a fresh emulator: an existing VPN configuration was found")
         device.run("root")
         device.run("wait-for-device")

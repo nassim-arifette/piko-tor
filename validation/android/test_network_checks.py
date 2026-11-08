@@ -43,5 +43,17 @@ class BlockingEvidenceTest(unittest.TestCase):
             module.require_blocked(self.entry)
 
 
+class DeviceInterfacesTest(unittest.TestCase):
+    def test_ip_tunnel_placeholder_is_not_an_android_vpn_tun(self):
+        device = module.Device("adb", "emulator-5554")
+        device.shell = lambda *args: "eth0 ip6tnl0 lo tunl0 wlan0"
+        self.assertEqual([], device.tun())
+
+    def test_real_vpn_tun_remains_detected_alongside_placeholders(self):
+        device = module.Device("adb", "emulator-5554")
+        device.shell = lambda *args: "lo tunl0 tun0 tun12 wlan0"
+        self.assertEqual(["tun0", "tun12"], device.tun())
+
+
 if __name__ == "__main__":
     unittest.main()
