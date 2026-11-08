@@ -69,10 +69,14 @@ jobs:
           path: |
             companion/build/generated/jniLibs
             companion/build/generated/assets/licenses
-      - name: Build patch bundle and APK, run unit tests and lint
+      - name: Build APK, run unit tests and lint
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./gradlew --no-daemon :companion:verifyTorNative buildAndroid :companion:assembleDebug :companion:testDebugUnitTest :companion:lintDebug
+        run: ./gradlew --no-daemon --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx2g' :companion:verifyTorNative :companion:assembleDebug :companion:testDebugUnitTest :companion:lintDebug
+      - name: Build patch bundle
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./gradlew --no-daemon --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx2g' buildAndroid
       - name: Check APK alignment and signature
         run: |
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 companion/build/outputs/apk/debug/companion-debug.apk
@@ -110,6 +114,7 @@ jobs:
         run: |
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;36.0.0'
           bash validation/android/build-probe.sh
+          python3 -m unittest discover -s validation/android -p 'test_*.py' -v
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: piko-tor-fixtures-${{ github.sha }}
