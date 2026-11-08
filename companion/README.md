@@ -1,21 +1,16 @@
 # Piko Tor — experimental X-only Tor
 
-**The requested default has changed:** Tor ON sends X through Tor while other apps
-keep their ordinary network; Tor OFF restores X's ordinary direct network.
-The companion `0.2.0-experimental` release candidate (version code 2) is unpublished.
-**Publication and final validation are PENDING.** No result for an earlier build
-certifies this final release candidate.
+**Tor ON sends X through Tor while other apps keep their ordinary network; Tor OFF
+restores X's ordinary direct network.** Experimental release `v3.10.0-tor.1`
+includes upstream Piko 3.10.0 and companion `0.2.0-experimental` (version code 2).
 
-The source includes upstream Piko 3.10.0, with bundle version
-`3.10.0-tor.1`. The published `3.9.0-tor.2` bundle and companion
-`0.1.0-experimental` still use the older strict behavior. `patches-bundle.json`
-selects that existing release, not this new default. The current X patch requires
-companion version code 2 or newer and opens this installation guide when the app
-is missing or outdated; it does not offer the old APK as a compatible update.
-The [dated report](../docs/validation/2026-11-08-piko-tor.md) separates the pending
-revision from earlier strict-mode evidence.
+The X patch requires companion version code 2 or newer and opens this installation
+guide when the app is missing or outdated. The old `3.9.0-tor.2`/0.1 release uses
+strict behavior and is not a compatible substitute for the new setup.
+The [dated report](../docs/validation/2026-11-08-piko-tor.md) records current build,
+emulator and real-X results separately from earlier strict-mode evidence.
 
-## Intended default behavior and limits
+## Default behavior and limits
 
 | State | X | Other apps in the profile |
 | --- | --- | --- |
@@ -24,10 +19,9 @@ revision from earlier strict-mode evidence.
 | Explicit OFF | Tunnel closes and X resumes its ordinary direct network. | Keep their ordinary network. |
 | Unexpected TUN loss, service death or consent revocation | X may reconnect directly without optional Android lockdown. | Remain subject to their ordinary network configuration. |
 
-These are requirements for the new default, not a claim that its pending tests
-have passed. An open TUN or Arti ready event alone does not prove end-to-end Tor
-routing. Do not interpret the mode as a crash-proof kill switch or a guarantee
-against all DNS, IPv6, native-process or other leaks.
+An open TUN or Arti ready event alone does not prove end-to-end Tor routing.
+The measured validation scenarios below do not make this a crash-proof kill
+switch or a guarantee against all DNS, IPv6, native-process or other leaks.
 
 Android's **Always-on VPN** and **Block connections without VPN** are optional
 advanced configuration. They are not enabled automatically or required by the
@@ -48,9 +42,9 @@ may isolate an intentionally strict setup, but is not required for this feature.
 - X reports companion installation/version, not a trusted protection claim.
   Sensitive actions require the visible companion UI; no remote control API may
   disable the VPN or Android policy without user action.
-- The unpublished development source has a best-effort visible-VPN guard before
+- Companion 0.2 has a best-effort visible-VPN guard before
   requesting consent and rechecks consent/target identity after the dialog.
-  Android can hide a per-app VPN that excludes the companion. The published
+  Android can hide a per-app VPN that excludes the companion. The older
   **3.9.0-tor.2 companion lacks these safeguards**.
 
 The TUN carries IPv4/IPv6 and Onionmasq's synthetic DNS addresses
@@ -66,15 +60,21 @@ Without Android lockdown, the same direct exposure can occur after unexpected
 tunnel loss. Strict Private DNS may suspend the engine; do not silently change the
 user's DNS policy to restore connectivity.
 
-## Development setup on a test device
+## Install or update
 
-The steps below target the **unpublished 0.2 release candidate**. The old published download
-does not provide this default.
+Download the files from the [experimental release](https://github.com/nassim-arifette/piko-tor/releases/tag/v3.10.0-tor.1):
 
-1. Build the development companion and patch bundle using the instructions below;
-   install with signing identities you trust. The companion and patched X are
-   separate APKs. Preserve existing app data/signatures when updating.
-2. Open X's Tor settings or the companion launcher, and confirm X's actual installed
+- [Patch bundle: `patches-3.10.0-tor.1.mpp`](https://github.com/nassim-arifette/piko-tor/releases/download/v3.10.0-tor.1/patches-3.10.0-tor.1.mpp)
+- [Companion: `piko-tor-0.2.0-experimental.apk`](https://github.com/nassim-arifette/piko-tor/releases/download/v3.10.0-tor.1/piko-tor-0.2.0-experimental.apk)
+- [SHA256SUMS](https://github.com/nassim-arifette/piko-tor/releases/download/v3.10.0-tor.1/SHA256SUMS)
+
+1. [Add Piko Tor to Morphe](https://morphe.software/add-source?github=nassim-arifette/piko-tor&name=Piko%20Tor%20experimental),
+   refresh its source, or import the `.mpp` manually. Keep **Use pre-release** off:
+   the source manifest is on `main`, even though the GitHub release is experimental.
+   Use one Piko source for X and enable **Tor network companion** in expert mode.
+   Patch the original X APKM while preserving the existing Morphe signing key.
+2. Install the companion APK separately, following the [signing and migration](#signing-and-migration)
+   notes. Open X's Tor settings or the companion launcher, and confirm X's actual installed
    package, certificate and distinct UID.
 3. Inspect Android VPN settings. Only one VPN can be active per profile; do not
    replace another provider unintentionally. The visible-VPN guard is best effort.
@@ -108,35 +108,19 @@ new normal mode, both should be off. This navigation was verified on that firmwa
 it is not a universal OEM interface. It did not create/change a PIN, install a
 helper APK, use root, or grant privileged settings permission.
 
-### Published legacy release
-
-[Add the legacy source to Morphe](https://morphe.software/add-source?github=nassim-arifette/piko-tor&name=Piko%20Tor%20experimental)
-or import `patches-3.9.0-tor.2.mpp` from the
-[published release](https://github.com/nassim-arifette/piko-tor/releases/tag/v3.9.0-tor.2).
-Its manifest is on `main`; leave Morphe's **Use pre-release** toggle off.
-Use one Piko source for X and enable **Tor network companion** in expert mode.
-
-That legacy companion requires Android Always-on VPN and lockdown to start its
-engine. It can block the rest of the profile and leave X blocked after stopping;
-it is not the new ON/OFF experience. X patched with that legacy bundle offers its
-legacy APK; the new patch opens installation instructions and refuses to open a
-version-code-1 companion. No new release or prepatched X APK is implied by
-the source changes. Published debug signing/checksums do not independently
-authenticate a publisher.
-
-### Signing and migration for the release candidate
+### Signing and migration
 
 The downloaded public `0.1.0-experimental` APK was verified against its release
 SHA-256 and has certificate fingerprint
 `7cb77ebdbbd49e40f8f447100b99958788274e8d5c12cf0375649ffe446d9456`.
-The persistent companion key used for the existing local phone installation has
+The persistent companion key used for release 0.2 has
 fingerprint `b1fa54b0d1876c71b26586ced20d78aab26716b2dcd812f7c0f207177c996866`.
-The release candidate is intended to use that persistent key. Final signing and
-publication must still be verified.
+The signed release APK was verified and installed in place over the matching
+local phone installation.
 
 These certificates differ, and no signing-key rotation lineage is configured.
-A new APK signed with the persistent key can preserve update continuity for the
-matching local installation, but cannot normally update the old public debug-signed
+An APK signed with the persistent key preserves update continuity for a
+matching installation, but cannot normally update the old public debug-signed
 companion in place. This affects `app.piko.tor`, not the separately signed X app.
 
 For an old public installation that Android rejects as an incompatible update,
@@ -202,22 +186,42 @@ selects Tor alone. A separate 2026-11-08 check also applied 71 existing patch
 selections plus Tor successfully; patching success does not establish their Android
 runtime behavior.
 
-## Validation evidence and remaining gates
+## Validation evidence and limits
 
-### Release candidate — publication and validation pending
+### Release 3.10.0-tor.1 / companion 0.2 (2026-11-08)
 
-The 0.2 release candidate changes the routing policy. Its final build, unit tests,
-emulator checks and real-device ON/OFF checks are **PENDING**. Required evidence
-includes X using Tor while another app remains direct, explicit OFF restoring
-direct X traffic, and engine suspension retaining the TUN without a direct fallback.
-Unexpected tunnel loss must be measured with system lockdown off and reported
-honestly; the earlier strict-mode block cannot be assumed in that configuration.
+[Run 42508484188](https://github.com/nassim-arifette/piko-tor/actions/runs/42508484188)
+passed for source `d20a955b`: all four native ABIs, 24 companion unit tests
+(128 policy combinations), 16 harness tests, debug/release lint, builds and APK
+checks. The signed release APK retained the CI release payload, persistent
+certificate and all four libraries' 16 KiB alignment.
 
-The intended experimental release contains `patches-3.10.0-tor.1.mpp`, the signed
-`piko-tor-0.2.0-experimental.apk` and `SHA256SUMS`, with sources in tag
-`v3.10.0-tor.1`. Publication is pending; the existing manifest and download remain
-on the legacy release until the new assets are available. A checksum records file
-integrity, not an independent publisher identity.
+On Android 15, the selected diagnostic UID returned `IsTor=true` while an
+unselected UID remained direct. Pausing the engine retained the same TUN and
+blocked the selected controls; explicit OFF restored direct access to both apps.
+Process death without lockdown allowed direct selected-app access, as documented.
+Manual restart recovered Tor. Optional lockdown was tested separately and also
+blocked other apps and traffic after OFF.
+
+On an Android 14 Xiaomi, Morphe applied all 72 selected X patches without failures
+and updated X in place with its existing signing identity and data. The signed
+0.2 release companion also updated in place. With Always-on and lockdown off,
+fresh X WebView checks returned `IsTor=true` while Chrome returned `IsTor=false`.
+A native profile and fresh normal-UI search worked (two rows, no error nodes).
+Explicit OFF removed the TUN and restored `IsTor=false` in X; Chrome remained
+direct. Current media playback was not retested in this release sequence.
+
+TCP connect acceptance in the emulator is not an end-to-end application transfer
+per IP family. Direct IPv6 was unavailable; optional-strict IPv6 failed its positive
+control. UID counters can miss `netd` DNS, and synthetic UDP is not real QUIC.
+Neither those checks nor the bounded phone UI observations prove global absence
+of leaks. See the [full report](../docs/validation/2026-11-08-piko-tor.md) for exact
+artifacts, transitions, scope and remaining gaps.
+
+Release sources are in tag `v3.10.0-tor.1`. `SHA256SUMS` records the two download
+files' integrity, not an independent publisher identity. No prepatched X APK or
+private signing key is distributed. Future VPN-profile detection work remains
+[research only](../docs/FUTURE_WORK.md).
 
 ### Prior strict build and patching checks (2026-11-08)
 
@@ -247,8 +251,8 @@ below and in the dated report.
 
 ### Prior strict-mode emulator checks (2026-11-08)
 
-The independent diagnostic app on Android 15/API 35 obtained `IsTor=true`, successful
-DNS and IPv4/IPv6 TCP connections, with zero measured physical-interface packet
+The independent diagnostic app on Android 15/API 35 obtained `IsTor=true`, DNS
+answers and accepted IPv4/IPv6 TCP connect controls, with zero measured physical-interface packet
 counts for its UID. Local TCP and synthetic UDP controls that worked directly were
 blocked through the VPN, and their host listeners received no connections/packets.
 
@@ -261,6 +265,7 @@ measured physical UID counts. The TUN did not reappear during four samples cover
 about two seconds; this short window does not establish automatic-restart behavior.
 Manual recovery restored `IsTor=true`.
 
+TCP connect acceptance is not end-to-end application transfer per address family.
 Direct IPv6 was unavailable in the baseline, so the test cannot establish absence
 of direct IPv6 leakage on an IPv6-capable underlying network. UID counters may miss
 DNS sent by Android's `netd`; synthetic UDP is not real QUIC. These are measured

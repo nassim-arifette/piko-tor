@@ -1,6 +1,7 @@
 ## Experimental Piko Tor
 
-The current development work implements the user's requested default:
+Experimental release **`3.10.0-tor.1`** includes upstream Piko 3.10.0 and the
+separate Piko Tor companion **`0.2.0-experimental`** (version code 2).
 
 - **Tor ON:** route X through Tor; other apps keep their ordinary network.
 - **Tor OFF:** stop the companion tunnel and restore X's ordinary direct network.
@@ -8,11 +9,11 @@ The current development work implements the user's requested default:
   of falling back directly. An unexpected tunnel loss or VPN revocation can let X
   connect directly unless optional Android lockdown is enabled.
 
-The source includes upstream Piko 3.10.0 and prepares experimental release
-**`3.10.0-tor.1`**, with companion **`0.2.0-experimental`** (version code 2).
-**Publication and final validation are PENDING.** The intended release files are
-`patches-3.10.0-tor.1.mpp`, `piko-tor-0.2.0-experimental.apk` and `SHA256SUMS`;
-they are not yet available from the published source.
+- [Add Piko Tor to Morphe](https://morphe.software/add-source?github=nassim-arifette/piko-tor&name=Piko%20Tor%20experimental)
+- [Patch bundle](https://github.com/nassim-arifette/piko-tor/releases/download/v3.10.0-tor.1/patches-3.10.0-tor.1.mpp)
+- [Companion APK](https://github.com/nassim-arifette/piko-tor/releases/download/v3.10.0-tor.1/piko-tor-0.2.0-experimental.apk)
+- [SHA256SUMS](https://github.com/nassim-arifette/piko-tor/releases/download/v3.10.0-tor.1/SHA256SUMS)
+- [Release notes and source](https://github.com/nassim-arifette/piko-tor/releases/tag/v3.10.0-tor.1)
 
 Android's **Always-on VPN** and **Block connections without VPN** are optional
 advanced settings, not the default setup. Lockdown can block other apps in the
@@ -20,42 +21,37 @@ profile and keep X blocked after Tor is turned OFF. It is never enabled
 automatically. Users who deliberately want that stricter behavior can configure
 it themselves, potentially in a separate Android profile.
 
-The published **3.9.0-tor.2** release still uses the older strict behavior.
-`patches-bundle.json` still selects that existing release. The current X patch
-requires companion version code 2 or newer and opens the installation guide when
-it is missing or outdated. **Adding the published source to Morphe does not install
-the new ON/OFF behavior.**
-See the build instructions to test the release candidate. The manifest will switch
-to the new version only after its release assets are published and verified.
-The planned companion signing key differs from the old public APK's debug key;
-see the [companion migration notes](companion/README.md#signing-and-migration-for-the-release-candidate)
-before updating an installation of that public legacy APK.
+The X patch requires companion version code 2 or newer and opens the installation
+guide when it is missing or outdated. Morphe does not install the companion from
+the patch bundle. The new companion's persistent signing key differs from the old
+public 0.1 APK's debug key; follow the
+[companion migration notes](companion/README.md#signing-and-migration) when updating
+that legacy installation. Older strict setups also need their Android Always-on
+and lockdown options turned off for the normal ON/OFF behavior.
 
-- [Add the published legacy source to Morphe](https://morphe.software/add-source?github=nassim-arifette/piko-tor&name=Piko%20Tor%20experimental)
-- [Published legacy bundle and companion APK](https://github.com/nassim-arifette/piko-tor/releases/tag/v3.9.0-tor.2)
-- [Development setup, limitations and build instructions](companion/README.md)
-- [Validation status and earlier strict-mode evidence](docs/validation/2026-11-08-piko-tor.md)
+- [Installation, limitations and build instructions](companion/README.md)
+- [Validation results and earlier strict-mode evidence](docs/validation/2026-11-08-piko-tor.md)
 - [Future work and VPN-profile detection research](docs/FUTURE_WORK.md)
 
-Earlier validation on **2026-11-08**, before this behavior change, covered the
-strict build merged at `b78c21f4`: all four ABIs, 17 unit tests, lint, packaging,
-real Morphe patching, emulator network scenarios and bounded real-X checks on
-Android 14. With system lockdown enabled, X's WebView reported `IsTor=true`,
-native search and sampled media worked, and manually stopping the VPN blocked X.
-Those results remain evidence for that prior configuration; they do not validate
-the new default or demonstrate exhaustive leak prevention.
+Validation on **2026-11-08** passed all four ABIs, 24 companion unit tests,
+16 harness tests, debug/release lint and Android 15 emulator network scenarios.
+On an Android 14 phone, Morphe applied the existing 71 selections plus Tor without
+failures. X's fresh WebView check reported `IsTor=true` while Chrome remained
+direct; explicit OFF restored `IsTor=false` in X and Chrome stayed direct. Native
+X profile/search checks also worked. These bounded observations do not establish
+exhaustive leak prevention, full media coverage or compatibility with every device.
 
-Use one Piko source for X to avoid duplicate patches. The published legacy source's
-**Use pre-release** toggle remains off because its manifest is on `main`, not
-`dev`. Enable **Tor network companion** in expert mode. Morphe does not install
-the companion from the bundle, and no prepatched X APK is distributed. The automatic
-stable-release workflow remains restricted to upstream.
+Use one Piko source for X to avoid duplicate patches. Keep Morphe's **Use pre-release**
+toggle off because the source manifest is on `main`, not `dev`, even though this
+GitHub release is experimental. Enable **Tor network companion** in expert mode.
+No prepatched X APK is distributed. The automatic stable-release workflow remains
+restricted to upstream.
 
-Android permits one VPN per profile. The unpublished development source checks
+Android permits one VPN per profile. Companion 0.2 checks
 for another visible VPN before requesting consent and rechecks permission after
 the dialog. Android can hide per-app VPNs, so this guard cannot detect every
-provider. The published **3.9.0-tor.2 companion lacks these safeguards**. Inspect
-Android's VPN settings before starting; do not replace another VPN unintentionally.
+provider. Inspect Android's VPN settings before starting; do not replace another
+VPN unintentionally. The older 3.9.0-tor.2 companion lacks these safeguards.
 
 The upstream usage and catalogue below describe inherited Piko functionality,
 not completed Tor security validation.
