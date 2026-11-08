@@ -29,6 +29,7 @@ public final class MainActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private TextView status;
     private TextView target;
+    private TextView systemSettings;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -56,6 +57,8 @@ public final class MainActivity extends Activity {
         content.addView(target);
         status = new TextView(this);
         content.addView(status);
+        systemSettings = new TextView(this);
+        content.addView(systemSettings);
         addButton(content, R.string.choose_target, this::chooseTarget);
         addButton(content, R.string.start_vpn, () -> showDialog(new AlertDialog.Builder(this)
                 .setTitle(R.string.start_vpn).setMessage(R.string.configuration_warning)
@@ -204,6 +207,13 @@ public final class MainActivity extends Activity {
                     ? ProtectionState.VPN_MISSING : ProtectionState.OFF;
         }
         status.setText(describe(this, state));
+        systemSettings.setText(TorVpnService.active()
+                ? getString(R.string.system_settings_state,
+                        getString(TorVpnService.alwaysOn() ? R.string.setting_on : R.string.setting_off),
+                        getString(TorVpnService.lockdown() ? R.string.setting_on : R.string.setting_off))
+                        + "\n" + getString(TorVpnService.lockdown()
+                                ? R.string.lockdown_enabled_warning : R.string.optional_system_settings)
+                : getString(R.string.optional_system_settings));
     }
 
     private final Runnable refresh = new Runnable() {
@@ -218,7 +228,6 @@ public final class MainActivity extends Activity {
             case OFF -> R.string.state_off;
             case TARGET_INVALID -> R.string.target_invalid;
             case VPN_MISSING -> R.string.state_vpn_missing;
-            case LOCKDOWN_MISSING -> R.string.state_lockdown_missing;
             case PRIVATE_DNS_UNSUPPORTED -> R.string.state_private_dns;
             case NETWORK_UNAVAILABLE -> R.string.state_network_missing;
             case CONNECTING -> R.string.state_connecting;

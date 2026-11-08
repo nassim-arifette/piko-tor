@@ -18,6 +18,7 @@ import uuid
 import xml.etree.ElementTree as ET
 
 PROBE = "app.piko.tor.probe"
+CONTROL = "app.piko.tor.control"
 COMPANION = "app.piko.tor"
 SETUP = "/data/local/tmp/piko-vpn-setup.zip"
 
@@ -34,6 +35,7 @@ class Device:
     def __init__(self, adb: str, serial: str):
         self.command = [adb, "-s", serial]
         self.control_addresses: dict[str, str] = {}
+        self.probe_uids: dict[str, int] = {}
 
     def run(self, *arguments: str, data: str | None = None, timeout: int = 60) -> str:
         try:
@@ -61,13 +63,15 @@ class Device:
             result[name] = int(self.shell("cat", "/sys/class/net/" + name + "/ifindex"))
         return result
 
-    def probe(self, operation: str, token: str | None = None) -> dict:
+    def probe(self, operation: str, token: str | None = None, package: str = PROBE) -> dict:
+        if package not in {PROBE, CONTROL}:
+            raise Incomplete("Unknown diagnostic fixture package")
         args = ["am", "instrument", "-w", "-e", "operation", operation]
         if token:
             args += ["-e", "token", token]
         if operation in self.control_addresses:
             args += ["-e", "address", self.control_addresses[operation]]
-        args += [PROBE + "/.ProbeInstrumentation"]
+        args += [package + "/app.piko.tor.probe.ProbeInstrumentation"]
         output = self.shell(*args, timeout=45)
         match = re.search(r"^INSTRUMENTATION_RESULT: result=(\{.*\})$", output, re.MULTILINE)
         if not match or "INSTRUMENTATION_CODE: -1" not in output:
@@ -81,16 +85,20 @@ class Device:
             if previous != address:
                 raise Incomplete("TCP control address changed between experiment phases")
             result["literal_control"] = True
-        if result.get("uid") != getattr(self, "probe_uid", result.get("uid")):
+        if result.get("uid") != self.probe_uids.get(package, result.get("uid")):
             raise Regression("Probe executed under the wrong Android UID")
         return result
 
-    def vpn(self, operation: str) -> bool:
+    def vpn(self, operation: str) -> dict:
         result = self.shell("env", "CLASSPATH=" + SETUP, "app_process", "/",
                             "app.piko.tor.validation.VpnSetup", operation)
-        if result not in {"PIKO_LAB_VPN_ENABLED", "PIKO_LAB_VPN_DISABLED"}:
+        prefix = "PIKO_LAB_VPN_STATE="
+        if not result.startswith(prefix):
             raise Incomplete("Named Android VPN API helper did not complete")
-        return result == "PIKO_LAB_VPN_ENABLED"
+        state = json.loads(result[len(prefix):])
+        if not isinstance(state.get("lockdown"), bool) or "always_on_package" not in state:
+            raise Incomplete("Named Android VPN API helper returned an invalid state")
+        return state
 
 
 class Echo:
@@ -234,6 +242,71 @@ def require_blocked(entry: dict) -> None:
         raise Regression(name + ": target UID emitted physical-interface packets")
 
 
+def require_mode(state: dict, strict: bool) -> None:
+    expected = {"always_on_package": COMPANION if strict else None, "lockdown": strict}
+    if state != expected:
+        raise Regression("Unexpected Android VPN mode: " + json.dumps(state, sort_keys=True))
+
+
+def require_direct(entry: dict) -> None:
+    """Positive evidence for a UID that should use the ordinary network now."""
+    results = {item["operation"]: item for item in entry["results"]}
+    for operation in ("tor", "tcp4", "local_tcp", "udp"):
+        if not results.get(operation, {}).get("success"):
+            raise Incomplete(entry["name"] + ": required direct control failed: " + operation)
+    if results["tor"].get("is_tor") is not False:
+        raise Regression(entry["name"] + ": the direct control unexpectedly used Tor")
+    if any(results[operation].get("host_received") != 1 for operation in ("local_tcp", "udp")):
+        raise Incomplete(entry["name"] + ": direct host controls lack independent positive evidence")
+    if not entry["physical_uid_packets"].get("iptables", 0):
+        raise Incomplete(entry["name"] + ": direct UID counter lacks a positive control")
+
+
+def stop_through_ui(device: Device) -> None:
+    """Use the ordinary OFF button and confirmation, without killing the service."""
+    device.shell("am", "start", "-n", COMPANION + "/.MainActivity")
+
+    def click(text: str | None = None, resource_id: str | None = None):
+        device.shell("uiautomator", "dump", "/data/local/tmp/piko-validation-ui.xml")
+        content = device.shell("cat", "/data/local/tmp/piko-validation-ui.xml")
+        try:
+            tree = ET.fromstring(content)
+            for item in tree.iter("node"):
+                if (item.get("package") == COMPANION and item.get("clickable") == "true"
+                        and item.get("enabled") == "true"
+                        and (text is None or item.get("text", "").casefold() == text.casefold())
+                        and (resource_id is None or item.get("resource-id") == resource_id)):
+                    match = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", item.get("bounds", ""))
+                    if match:
+                        left, top, right, bottom = map(int, match.groups())
+                        if right > left and bottom > top:
+                            device.shell("input", "tap", str((left + right) // 2), str((top + bottom) // 2))
+                            return True
+            # Small emulator windows can place OFF below the explanatory text.
+            if text is not None:
+                for item in tree.iter("node"):
+                    if item.get("package") == COMPANION and item.get("scrollable") == "true":
+                        match = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", item.get("bounds", ""))
+                        if match:
+                            left, top, right, bottom = map(int, match.groups())
+                            x = str((left + right) // 2)
+                            device.shell("input", "swipe", x, str(top + (bottom - top) * 3 // 4),
+                                         x, str(top + (bottom - top) // 4), "350")
+                            break
+        except ET.ParseError:
+            pass
+        return False
+
+    wait_for(lambda: click(text="Turn Tor OFF for X"), 20, "the companion's ordinary OFF button")
+    wait_for(lambda: click(resource_id="android:id/button1"), 20, "the ordinary OFF confirmation")
+    wait_for(lambda: not device.tun(), 30, "TUN removal after ordinary OFF")
+    preferences = device.shell("run-as", COMPANION, "cat", "shared_prefs/tor_configuration.xml")
+    requested = next((item.get("value") for item in ET.fromstring(preferences)
+                      if item.get("name") == "requested"), None)
+    if requested != "false":
+        raise Regression("Ordinary OFF did not persist requested=false")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--serial", required=True)
@@ -246,14 +319,14 @@ def main() -> int:
     if os.environ.get("PIKO_DISPOSABLE_EMULATOR") != "1" or not re.fullmatch(r"emulator-\d+", args.serial):
         parser.error("Set PIKO_DISPOSABLE_EMULATOR=1 and explicitly select an emulator-NNNN serial")
     args.output.mkdir(parents=True, exist_ok=True)
-    report = {"schema": 1, "status": "incomplete", "scenarios": [], "limitations": [
-        "Independent diagnostic UID, not authenticated X or its auxiliary processes.",
+    report = {"schema": 2, "status": "incomplete", "scenarios": [], "limitations": [
+        "Independent target and unselected diagnostic UIDs, not authenticated X or its auxiliary processes.",
         "No global absence-of-leaks claim; output counters may not attribute netd-owned DNS.",
         "UDP is a synthetic host echo, not a real QUIC implementation.",
         "DNS can be cached: a successful blocked-phase lookup is not direct-network evidence.",
         "No physical-device, reboot, battery or OEM matrix validation."]}
     device = Device(args.adb, args.serial)
-    counters = echo = None
+    counters = control_counters = echo = None
     configured = False
     original_dns = {}
     exit_code = 2
@@ -280,35 +353,48 @@ def main() -> int:
         for key in ("private_dns_mode", "private_dns_specifier"):
             original_dns[key] = device.shell("settings", "get", "global", key)
         device.shell("settings", "put", "global", "private_dns_mode", "off")
-        for apk in (args.companion, args.fixtures / "probe.apk"):
+        for apk in (args.companion, args.fixtures / "probe.apk", args.fixtures / "control.apk"):
             device.run("install", "-r", str(apk.resolve()), timeout=120)
         device.run("push", str((args.fixtures / "vpn-setup.zip").resolve()), SETUP)
         identity = device.probe("identity")
         if not identity.get("success") or not re.fullmatch(r"[a-f0-9]{64}", identity.get("certificate", "")):
             raise Incomplete("Probe signing identity unavailable")
-        device.probe_uid = identity["uid"]
+        if identity.get("package") != PROBE:
+            raise Regression("Target fixture reported a different package")
+        device.probe_uids[PROBE] = identity["uid"]
+        control_identity = device.probe("identity", package=CONTROL)
+        if (not control_identity.get("success") or control_identity.get("package") != CONTROL
+                or control_identity.get("certificate") != identity["certificate"]):
+            raise Incomplete("Control fixture package/signing identity unavailable or mismatched")
+        device.probe_uids[CONTROL] = control_identity["uid"]
         companion_uid = int(device.shell("run-as", COMPANION, "id", "-u"))
-        if device.probe_uid == companion_uid or device.probe_uid < 10000:
-            raise Regression("Probe and companion must have distinct application UIDs")
-        report["identities"] = {"probe": identity, "companion_uid": companion_uid,
+        uids = [identity["uid"], control_identity["uid"], companion_uid]
+        if len(set(uids)) != 3 or any(uid < 10000 for uid in uids):
+            raise Regression("Target, control and companion must have three distinct application UIDs")
+        report["identities"] = {"probe": identity, "control": control_identity, "companion_uid": companion_uid,
                                 "companion_apk_sha256": sha256(args.companion),
-                                "probe_apk_sha256": sha256(args.fixtures / "probe.apk")}
+                                "probe_apk_sha256": sha256(args.fixtures / "probe.apk"),
+                                "control_apk_sha256": sha256(args.fixtures / "control.apk")}
         report["network_before_readiness"] = device.probe("network")
         report["probe_run_as_identity"] = device.shell("run-as", PROBE, "id")
         echo = Echo()
-        counters = Counters(device, device.probe_uid)
+        counters = Counters(device, identity["uid"])
+        control_counters = Counters(device, control_identity["uid"])
+        phase = "direct_baseline"
+        require_mode(device.vpn("status"), strict=False)
 
-        def measure(name: str, operations: list[str], blocked: bool = False) -> dict:
-            before = counters.read()
+        def measure(name: str, operations: list[str], blocked: bool = False, package: str = PROBE) -> dict:
+            selected_counters = counters if package == PROBE else control_counters
+            before = selected_counters.read()
             results = []
             for operation in operations:
                 token = "piko-" + uuid.uuid4().hex if operation in {"udp", "local_tcp"} else None
-                result = device.probe(operation, token)
+                result = device.probe(operation, token, package=package)
                 if token:
                     result["host_received"] = echo.received(token)
                 results.append(result)
-            after = counters.read()
-            entry = {"name": name, "results": results,
+            after = selected_counters.read()
+            entry = {"name": name, "mode": phase, "package": package, "results": results,
                      "physical_uid_packets": {key: after[key] - before[key] for key in before},
                      "tun": device.tun()}
             report["scenarios"].append(entry)
@@ -316,12 +402,13 @@ def main() -> int:
                 require_blocked(entry)
             return entry
 
-        readiness_attempts = 0
-        def direct_ready():
-            nonlocal readiness_attempts
-            readiness_attempts += 1
-            entry = measure("direct_readiness_" + str(readiness_attempts), ["dns", "tcp4", "local_tcp", "udp"])
-            entry["network"] = device.probe("network")
+        readiness_attempts: dict[str, int] = {}
+        def direct_ready(package: str = PROBE):
+            readiness_attempts[package] = readiness_attempts.get(package, 0) + 1
+            label = "direct_readiness_" if package == PROBE else "control_direct_readiness_"
+            entry = measure(label + str(readiness_attempts[package]), ["dns", "tcp4", "local_tcp", "udp"],
+                            package=package)
+            entry["network"] = device.probe("network", package=package)
             return all(item.get("success") and item.get("host_received", 1) == 1
                        for item in entry["results"])
         wait_for(direct_ready, 90, "direct DNS, TCP and UDP positive controls before VPN setup")
@@ -340,6 +427,9 @@ def main() -> int:
             if controls[operation].get("host_received") != 1:
                 raise Incomplete("Controlled host failed to observe positive " + operation)
         report["ipv6_direct_positive_control"] = controls["tcp6"]["success"]
+        wait_for(lambda: direct_ready(CONTROL), 90, "the separate UID's direct positive controls")
+        require_direct(measure("unselected_direct_positive_controls", ["tor", "tcp4", "local_tcp", "udp"],
+                               package=CONTROL))
 
         device.shell("am", "force-stop", COMPANION)
         configuration = ("<?xml version='1.0' encoding='utf-8' standalone='yes' ?><map>"
@@ -350,12 +440,10 @@ def main() -> int:
         device.shell("run-as", COMPANION, "mkdir", "-p", "shared_prefs")
         device.shell("run-as", COMPANION, "sh", "-c", "cat > shared_prefs/tor_configuration.xml", data=configuration)
         configured = True
-        if not device.vpn("enable"):
-            raise Incomplete("Platform always-on + lockdown setup failed")
-        wait_for(device.tun, 30, "VPN TUN")
-
-        def healthy(label: str):
+        def healthy(label: str, strict: bool = True):
             attempts = []
+            vpn_before = device.vpn("status")
+            require_mode(vpn_before, strict)
             before = counters.read()
             def check():
                 result = device.probe("tor")
@@ -366,12 +454,53 @@ def main() -> int:
             finally:
                 after = counters.read()
                 delta = {key: after[key] - before[key] for key in before}
-                report["scenarios"].append({"name": label, "tor_attempts": attempts,
+                report["scenarios"].append({"name": label, "mode": phase, "package": PROBE,
+                                            "tor_attempts": attempts, "vpn_state": vpn_before,
                                             "physical_uid_packets": delta, "tun": device.tun()})
             if any(delta.values()):
                 raise Regression(label + ": probe UID emitted physical-interface packets")
-            if not device.vpn("status"):
-                raise Regression("Tor path is reachable without required recorded lockdown state")
+            require_mode(device.vpn("status"), strict)
+
+        # Default mode: ordinary VPN consent only. The control UID is never paired.
+        phase = "per_app"
+        require_mode(device.vpn("authorize"), strict=False)
+        device.shell("am", "start-foreground-service", "-n", COMPANION + "/.TorVpnService",
+                     "-a", "app.piko.tor.START")
+        wait_for(device.tun, 30, "ordinary per-app VPN TUN without Android lockdown")
+        healthy("per_app_target_tor", strict=False)
+        selected = measure("per_app_target_tcp", ["dns", "tcp4", "tcp6"])
+        if any(selected["physical_uid_packets"].values()):
+            raise Regression("Per-app target TCP emitted physical-interface packets")
+        for operation in ("tcp4", "tcp6"):
+            if not any(item["operation"] == operation and item.get("success") for item in selected["results"]):
+                raise Incomplete("Per-app Tor positive control failed: " + operation)
+        measure("per_app_target_local_and_udp_blocked", ["local_tcp", "udp"], blocked=True)
+        unselected = measure("per_app_unselected_direct", ["tor", "tcp4", "local_tcp", "udp"], package=CONTROL)
+        require_direct(unselected)
+        require_mode(device.vpn("status"), strict=False)
+        if not device.tun():
+            raise Regression("The per-app TUN disappeared while checking the unselected UID")
+        healthy("per_app_target_still_tor_after_control", strict=False)
+
+        # An explicit user OFF intentionally returns the selected UID to direct access.
+        stop_through_ui(device)
+        require_mode(device.vpn("status"), strict=False)
+        phase = "per_app_off"
+        off = measure("per_app_off_target_direct", ["tor", "tcp4", "local_tcp", "udp"])
+        off["stop_path"] = "companion_button_and_confirmation"
+        off["requested"] = False
+        off["vpn_state"] = device.vpn("status")
+        require_mode(off["vpn_state"], strict=False)
+        if off["tun"]:
+            raise Regression("A TUN reappeared after ordinary OFF")
+        require_direct(off)
+
+        # Optional strict mode retains the prior crash/pause coverage as a separate phase.
+        phase = "optional_strict"
+        require_mode(device.vpn("enable"), strict=True)
+        device.shell("am", "start-foreground-service", "-n", COMPANION + "/.TorVpnService",
+                     "-a", "app.piko.tor.START")
+        wait_for(device.tun, 30, "optional strict VPN TUN")
 
         healthy("healthy_tor_before_failures")
         through_tor = measure("tor_positive_controls", ["dns", "tcp4", "tcp6"])
@@ -392,8 +521,9 @@ def main() -> int:
             negative_ops.insert(2, "tcp6")
         paused = measure("engine_paused_same_tun", negative_ops + ["dns"], blocked=True)
         paused["retained_tun_ifindices"] = original_tun
-        if device.tun_identity() != original_tun or not device.vpn("status"):
-            raise Regression("Paused-engine measurement did not retain its TUN and lockdown")
+        if device.tun_identity() != original_tun:
+            raise Regression("Paused-engine measurement did not retain its TUN")
+        require_mode(device.vpn("status"), strict=True)
         device.shell("settings", "put", "global", "private_dns_mode", "off")
         device.shell("settings", "delete", "global", "private_dns_specifier")
         healthy("recovery_after_engine_pause")
@@ -433,8 +563,7 @@ def main() -> int:
         if monitor_errors or any(observed_tuns):
             raise Incomplete("TUN reappeared or monitoring failed: exact tunnel-absent experiment is inconclusive")
         require_blocked(crash)
-        if not device.vpn("status"):
-            raise Regression("Android lockdown disappeared after process crash")
+        require_mode(device.vpn("status"), strict=True)
 
         # Manual recovery is distinct from automatic recovery; do not claim the latter.
         device.shell("am", "start-foreground-service", "-n", COMPANION + "/.TorVpnService",
@@ -451,6 +580,8 @@ def main() -> int:
     finally:
         if counters:
             counters.close()
+        if control_counters:
+            control_counters.close()
         if echo:
             echo.close()
         if configured:

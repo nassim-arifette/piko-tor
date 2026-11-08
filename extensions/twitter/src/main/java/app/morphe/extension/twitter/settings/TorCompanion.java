@@ -13,6 +13,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.Intent;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
@@ -23,13 +24,16 @@ import app.morphe.extension.crimera.PikoUtils;
 
 public final class TorCompanion {
     private static final String PACKAGE = "app.piko.tor";
-    private static final String DOWNLOAD_URL = "https://github.com/nassim-arifette/piko-tor/releases/download/v3.9.0-tor.2/piko-tor-0.1.0-experimental.apk";
+    private static final long MIN_COMPANION_VERSION_CODE = 2;
+    private static final String INSTALLATION_URL = "https://github.com/nassim-arifette/piko-tor/blob/main/companion/README.md";
 
     private TorCompanion() {}
 
     public static String actionTitle(Context context) {
-        return str(Build.VERSION.SDK_INT >= 29 && !isInstalled(context)
-                ? "piko_tor_download" : "piko_tor_open");
+        if (Build.VERSION.SDK_INT < 29) return str("piko_tor_open");
+        PackageInfo installed = installedCompanion(context);
+        return str(installed == null ? "piko_tor_download"
+                : isCompatible(installed) ? "piko_tor_open" : "piko_tor_update");
     }
 
     @SuppressWarnings("deprecation")
@@ -41,23 +45,24 @@ public final class TorCompanion {
         preference.setSummary(summary(context));
     }
 
-    private static boolean isInstalled(Context context) {
+    private static PackageInfo installedCompanion(Context context) {
         try {
-            context.getPackageManager().getPackageInfo(PACKAGE, 0);
-            return true;
+            return context.getPackageManager().getPackageInfo(PACKAGE, 0);
         } catch (PackageManager.NameNotFoundException e) {
-            return false;
+            return null;
         }
+    }
+
+    private static boolean isCompatible(PackageInfo installed) {
+        return installed.getLongVersionCode() >= MIN_COMPANION_VERSION_CODE;
     }
 
     public static String summary(Context context) {
         if (Build.VERSION.SDK_INT < 29) return str("piko_tor_unsupported");
-        try {
-            String version = context.getPackageManager().getPackageInfo(PACKAGE, 0).versionName;
-            return str("piko_tor_installed", version) + "\n" + str("piko_tor_unverified");
-        } catch (PackageManager.NameNotFoundException e) {
-            return str("piko_tor_missing");
-        }
+        PackageInfo installed = installedCompanion(context);
+        if (installed == null) return str("piko_tor_missing");
+        if (!isCompatible(installed)) return str("piko_tor_outdated", installed.versionName);
+        return str("piko_tor_installed", installed.versionName) + "\n" + str("piko_tor_unverified");
     }
 
     public static void open(Context context) {
@@ -75,14 +80,15 @@ public final class TorCompanion {
             return;
         }
         Activity activity = (Activity) context;
-        if (!isInstalled(activity)) {
+        PackageInfo installed = installedCompanion(activity);
+        if (installed == null || !isCompatible(installed)) {
             new AlertDialog.Builder(activity)
-                    .setTitle(str("piko_tor_download"))
+                    .setTitle(actionTitle(activity))
                     .setMessage(str("piko_tor_download_warning"))
                     .setNegativeButton(android.R.string.cancel, null)
-                    .setPositiveButton(str("piko_tor_download"), (dialog, which) -> {
+                    .setPositiveButton(str("piko_tor_install_instructions"), (dialog, which) -> {
                         try {
-                            activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(DOWNLOAD_URL))
+                            activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(INSTALLATION_URL))
                                     .addCategory(Intent.CATEGORY_BROWSABLE));
                         } catch (RuntimeException e) {
                             PikoUtils.toast(str("piko_tor_download_failed"));

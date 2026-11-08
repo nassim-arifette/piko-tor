@@ -36,7 +36,7 @@ private val torCompanionVisibilityPatch = resourcePatch {
 @Suppress("unused")
 val torNetworkPatch = bytecodePatch(
     name = "Tor network companion",
-    description = "Opens the experimental Piko Tor companion. Requires a separate APK and Android always-on VPN with lockdown. Does not certify leak prevention.",
+    description = "Opens the experimental Piko Tor companion to turn Tor on or off for X only. Requires a separate APK. Android VPN lockdown is optional and can block other apps. Does not certify leak prevention.",
     default = false,
 ) {
     compatibleWith(COMPATIBILITY_X)

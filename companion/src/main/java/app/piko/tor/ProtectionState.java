@@ -2,15 +2,14 @@ package app.piko.tor;
 
 /** Reports prerequisites, never a claim that leak testing has passed. */
 public enum ProtectionState {
-    OFF, TARGET_INVALID, VPN_MISSING, LOCKDOWN_MISSING, PRIVATE_DNS_UNSUPPORTED, NETWORK_UNAVAILABLE,
+    OFF, TARGET_INVALID, VPN_MISSING, PRIVATE_DNS_UNSUPPORTED, NETWORK_UNAVAILABLE,
     CONNECTING, TOR_UNAVAILABLE, TOR_READY;
 
     public static ProtectionState evaluate(boolean requested, boolean targetValid, boolean tun,
-            boolean alwaysOn, boolean lockdown, boolean privateDns, boolean failed, boolean ready, boolean network) {
+            boolean privateDns, boolean failed, boolean ready, boolean network) {
         if (!requested) return OFF;
         if (!targetValid) return TARGET_INVALID;
         if (!tun) return VPN_MISSING;
-        if (!alwaysOn || !lockdown) return LOCKDOWN_MISSING;
         if (privateDns) return PRIVATE_DNS_UNSUPPORTED;
         if (!network) return NETWORK_UNAVAILABLE;
         if (failed) return TOR_UNAVAILABLE;

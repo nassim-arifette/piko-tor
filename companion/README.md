@@ -1,108 +1,124 @@
-# Piko Tor — experimental milestone
+# Piko Tor — experimental X-only Tor
 
-**Not validated for sensitive use. There is no “protected” indicator.** Building an APK,
-an open TUN, or Arti's bootstrap-ready event does not prove that X cannot leak traffic.
+**The requested default has changed:** Tor ON sends X through Tor while other apps
+keep their ordinary network; Tor OFF restores X's ordinary direct network.
+The companion 0.2 development revision (version code 2) is unpublished, and its
+**build, default-mode network and physical-device validation are PENDING**.
 
-The current source includes upstream Piko 3.10.0 and uses the unpublished development
-version `3.10.0-tor.1-dev.1`. The published patch bundle remains `3.9.0-tor.2`, based
-on Piko 3.9.0, with companion APK `0.1.0-experimental`. `patches-bundle.json` still
-selects that existing release for Morphe; it does not distribute the current source.
-Build, unit, packaging, real Morphe patching and bounded Android 15 network checks
-passed on 2026-11-08. See the
-[current validation report](../docs/validation/2026-11-08-piko-tor.md); the separate
-October runtime observations below apply only to their recorded older revisions.
+The source includes upstream Piko 3.10.0, with bundle version
+`3.10.0-tor.1-dev.2`. The published `3.9.0-tor.2` bundle and companion
+`0.1.0-experimental` still use the older strict behavior. `patches-bundle.json`
+and X's download link select that existing release, not this new default.
+The [dated report](../docs/validation/2026-11-08-piko-tor.md) separates the pending
+revision from earlier strict-mode evidence.
+
+## Intended default behavior and limits
+
+| State | X | Other apps in the profile |
+| --- | --- | --- |
+| ON, Tor ready | Selected X traffic uses the companion's Tor tunnel within its supported scope. | Keep their ordinary network. |
+| ON, engine unavailable but TUN retained | Traffic is blocked; no internal direct fallback. | Keep their ordinary network. |
+| Explicit OFF | Tunnel closes and X resumes its ordinary direct network. | Keep their ordinary network. |
+| Unexpected TUN loss, service death or consent revocation | X may reconnect directly without optional Android lockdown. | Remain subject to their ordinary network configuration. |
+
+These are requirements for the new default, not a claim that its pending tests
+have passed. An open TUN or Arti ready event alone does not prove end-to-end Tor
+routing. Do not interpret the mode as a crash-proof kill switch or a guarantee
+against all DNS, IPv6, native-process or other leaks.
+
+Android's **Always-on VPN** and **Block connections without VPN** are optional
+advanced configuration. They are not enabled automatically or required by the
+normal setup. Lockdown can block other apps in the profile and keep X blocked
+after OFF; it therefore changes the normal toggle behavior. A separate profile
+may isolate an intentionally strict setup, but is not required for this feature.
 
 ## Architecture and boundaries
 
-- X + the optional **Tor network companion** Morphe patch: a settings section and an
-  explicit, visible handoff to `app.piko.tor.MainActivity`. Disabled by default. No
-  VPN service, Tor native library, control broadcast, or trusted remote status in X.
-- Piko Tor (`app.piko.tor`, Android 10/API 29+): its own APK/UID, `VpnService`, and
-  Onionmasq/Arti JNI runtime. No shared signing certificate is required.
-- The user confirms X's actual installed package, signing-certificate SHA-256, and
-  distinct UID in the companion. Re-signing/reinstalling with a new UID invalidates
-  that association. Shared-UID targets are rejected. The picker supports renamed
-  packages; it cannot certify that the selected app really is X.
-- `startActivityForResult` lets Android identify the caller. Caller-supplied extras
-  are never trusted. Sensitive actions require the visible companion UI; its
-  service requires the system `BIND_VPN_SERVICE` permission. No IPC API can stop the
-  VPN or disable lockdown. X reports only installation/version, never protection.
-- In the **current unpublished development source**, the companion refuses to
-  request VPN consent when another VPN is visible to it. This is best-effort
-  detection: Android can hide a per-app VPN that excludes the companion's UID.
-  After the consent dialog, permission and the selected target are checked again;
-  a stale approval does not start the service. The **published 3.9.0-tor.2 companion
-  lacks the visible-VPN guard and post-consent recheck**.
+- X + the optional **Tor network companion** Morphe patch exposes a settings entry
+  and visible handoff to `app.piko.tor.MainActivity`. The patch is disabled by
+  default. No VPN service or Tor native library is injected into X.
+- Piko Tor (`app.piko.tor`, Android 10/API 29+) has its own APK/UID, `VpnService`
+  and Onionmasq/Arti JNI runtime. Shared signing with X is not required.
+- The selected X package is scoped with `addAllowedApplication`; other apps are
+  excluded from the tunnel. Pairing checks the installed package, certificate and
+  distinct UID. Reinstalling or changing identity invalidates the association.
+- X reports companion installation/version, not a trusted protection claim.
+  Sensitive actions require the visible companion UI; no remote control API may
+  disable the VPN or Android policy without user action.
+- The unpublished development source has a best-effort visible-VPN guard before
+  requesting consent and rechecks consent/target identity after the dialog.
+  Android can hide a per-app VPN that excludes the companion. The published
+  **3.9.0-tor.2 companion lacks these safeguards**.
 
-The companion routes the selected application's UID through an IPv4/IPv6 TUN
-using `addAllowedApplication`, with Onionmasq's synthetic DNS addresses
-`169.254.42.53` and `fe80::53`. Onionmasq forwards supported TCP/DNS traffic via Arti.
-UDP/QUIC relaying and bypass UID APIs are not exposed; the pinned upstream defaults
-to UDP rejection, not a direct fallback. Media and auxiliary/isolated processes
-may therefore fail; coverage must be observed on Android, not inferred from hooks.
+The TUN carries IPv4/IPv6 and Onionmasq's synthetic DNS addresses
+`169.254.42.53` and `fe80::53`. Supported TCP/DNS traffic is forwarded through
+Arti. Unsupported UDP/QUIC is rejected while the tunnel is active; it is not sent
+directly to make media work. X auxiliary or isolated processes need separate
+coverage tests.
 
-Only the Tor engine requests `protect(socket)`; it is refused unless this engine
-generation is current and Android always-on plus lockdown are detected. A retained
-TUN descriptor is intended to blackhole traffic while the engine is stopped.
-Native execution owns a separate duplicate descriptor. Worker shutdown is
-asynchronous; another worker cannot begin until the previous one exits.
-STOP and revocation explicitly release resources instead of waiting for Android to
-destroy a still-bound service. Target changes remain blocked until the native
-worker exits; a subsequent start reloads the selected identity.
+Only the current Tor engine may protect its outbound sockets against a VPN loop.
+If the engine pauses, keep the TUN instead of creating a direct bypass. An explicit
+OFF action is different: it closes the tunnel so X can use the ordinary network.
+Without Android lockdown, the same direct exposure can occur after unexpected
+tunnel loss. Strict Private DNS may suspend the engine; do not silently change the
+user's DNS policy to restore connectivity.
 
-## Setup on a test device
+## Development setup on a test device
 
-[Add this fork to Morphe](https://morphe.software/add-source?github=nassim-arifette/piko-tor&name=Piko%20Tor%20experimental)
+The steps below target the **unpublished 0.2 revision**. The old published download
+does not provide this default.
+
+1. Build the development companion and patch bundle using the instructions below;
+   install with signing identities you trust. The companion and patched X are
+   separate APKs. Preserve existing app data/signatures when updating.
+2. Open X's Tor settings or the companion launcher, and confirm X's actual installed
+   package, certificate and distinct UID.
+3. Inspect Android VPN settings. Only one VPN can be active per profile; do not
+   replace another provider unintentionally. The visible-VPN guard is best effort.
+4. For the normal ON/OFF behavior, leave **Always-on VPN** and **Block connections
+   without VPN** off. If upgrading from the old strict setup, turn those options
+   off manually in Android. Retained lockdown can keep X and other apps blocked
+   even after the companion stops.
+5. Start Tor in the companion and grant Android VPN consent. Wait for readiness and
+   verify actual Tor egress; a bootstrap event alone is not proof. Check that an
+   unselected app still has its ordinary connection.
+6. Use the companion's explicit OFF action to restore direct X connectivity. Verify
+   both X and another app remain usable. If system lockdown remains enabled, the
+   companion cannot silently remove that policy.
+
+A logged-in X account remains identifiable. Tor changes the network path, not the
+account identity; the ISP normally sees Tor connectivity.
+
+### Android VPN settings on the tested HyperOS firmware
+
+On the Android 14 Xiaomi used for the earlier strict tests, the normal HyperOS VPN
+entry requested a new screen lock. The existing Android VPN list could instead be
+opened through its exported Settings activity:
+
+```sh
+adb -s DEVICE_SERIAL shell am start -n com.android.settings/.SubSettings \
+  --es :settings:show_fragment com.android.settings.vpn2.VpnSettings
+```
+
+Select Piko Tor's arrow to inspect its actual Always-on/lockdown switches. For the
+new normal mode, both should be off. This navigation was verified on that firmware;
+it is not a universal OEM interface. It did not create/change a PIN, install a
+helper APK, use root, or grant privileged settings permission.
+
+### Published legacy release
+
+[Add the legacy source to Morphe](https://morphe.software/add-source?github=nassim-arifette/piko-tor&name=Piko%20Tor%20experimental)
 or import `patches-3.9.0-tor.2.mpp` from the
-[published experimental release](https://github.com/nassim-arifette/piko-tor/releases/tag/v3.9.0-tor.2).
-Leave the source's **Use pre-release** toggle off: Morphe switches that toggle to
-`dev`, but this fork publishes its experimental manifest on `main`. Use this
-source instead of upstream Piko for X to avoid duplicate patches. In expert mode,
-enable **Tor network companion** and provide your original X 12.19.1-release.0 APKM.
+[published release](https://github.com/nassim-arifette/piko-tor/releases/tag/v3.9.0-tor.2).
+Its manifest is on `main`; leave Morphe's **Use pre-release** toggle off.
+Use one Piko source for X and enable **Tor network companion** in expert mode.
 
-When the companion is missing, X offers **Download Piko Tor**. An explicit
-confirmation opens the companion APK from `v3.9.0-tor.2` in an external handler; Android
-still requires installation consent. Installed companions open the existing
-pairing/setup screen. No background download, installer permission, automatic
-installation or weakening of lockdown is added. If lockdown blocks the browser,
-transfer the APK from another device instead of disabling lockdown.
-
-The published release uses debug signing for the companion and has no detached publisher
-signature for the bundle. SHA-256 checksums detect mismatched files, not an
-independent publisher identity. The release tag provides the Piko source; pinned
-native source revisions and build instructions are below. No prepatched X APK is
-distributed. The upstream automatic stable-release job does not run in this fork.
-
-1. Use a spare device or dedicated Android profile. Install the patched X APK and
-   companion from a source you trust; confirm their signing identities separately.
-2. Do not use X while configuring protection. In Piko settings, open **Privacy —
-   Tor network**, or open the companion from the launcher. Confirm the target app.
-3. Check Android's VPN settings before preparing the VPN. Only one VPN can be active
-   per profile; the companion cannot reliably detect every other provider. Then
-   grant Android's VPN consent. A TUN alone is not a kill switch.
-4. In Android VPN settings, enable **Always-on VPN** AND **Block connections without
-   VPN** for **Piko Tor**. The engine refuses to start without both. These settings
-   cannot be silently enabled by the app. Check they remain enabled after upgrades.
-5. The companion distinguishes missing VPN, missing lockdown, unsupported strict
-   Private DNS, absent network, connection in progress, engine failure, and Tor's
-   reported readiness. None is a verified end-to-end protection claim.
-6. “Retry Tor / refresh circuits” retries a failed engine or requests new circuits;
-   it does not promise an immediate new exit IP or reset X's account identity.
-7. If recovery is needed, reopen Piko Tor and use **Prepare VPN / start**; do not
-   disable Android lockdown to regain connectivity. Manual recovery passed the
-   November 8 emulator test. Its post-kill observation covered only about two seconds,
-   so it does not establish automatic-restart behavior. The 120.7-second failure to
-   restart belongs to the older October 19 revision. Check both system settings again.
-
-**Important limits:** one VPN per Android profile. Per-app VPN plus lockdown can
-block the OTHER applications in that profile rather than letting them bypass.
-Strict Private DNS is intentionally unsupported in this milestone: engine paused,
-TUN retained. Do not silently turn off Android's DNS policy as a workaround.
-Stopping Piko Tor does not turn off Android lockdown. Revoking consent, disabling
-lockdown, changing provider, or uninstalling the companion can expose direct
-connectivity; the companion cannot override the user's system administrator choices.
-Before first setup, during consent, and without system lockdown, no protection is
-claimed. An authenticated X account remains identifiable; the ISP normally sees Tor.
+That legacy companion requires Android Always-on VPN and lockdown to start its
+engine. It can block the rest of the profile and leave X blocked after stopping;
+it is not the new ON/OFF experience. X's current download link still opens this
+existing APK after confirmation. No new release or prepatched X APK is implied by
+the source changes. Published debug signing/checksums do not independently
+authenticate a publisher.
 
 ## Build (Linux x86_64)
 
@@ -147,7 +163,7 @@ To apply only the optional patch to the supported X bundle with Morphe Desktop
 
 ```sh
 java -jar morphe-desktop-2.1.1-all.jar patch --exclusive \
-  -p patches/build/libs/patches-3.10.0-tor.1-dev.1.mpp -e 'Tor network companion' \
+  -p patches/build/libs/patches-3.10.0-tor.1-dev.2.mpp -e 'Tor network companion' \
   -o x-piko-tor.apk X-12.19.1-release.0.apkm
 ```
 
@@ -158,7 +174,19 @@ runtime behavior.
 
 ## Validation evidence and remaining gates
 
-### Current build and patching checks (2026-11-08)
+### New default — validation pending
+
+The 0.2 development revision changes the routing policy. Its build, unit tests,
+emulator checks and real-device ON/OFF checks are **PENDING**. Required evidence
+includes X using Tor while another app remains direct, explicit OFF restoring
+direct X traffic, and engine suspension retaining the TUN without a direct fallback.
+Unexpected tunnel loss must be measured with system lockdown off and reported
+honestly; the earlier strict-mode block cannot be assumed in that configuration.
+
+### Prior strict build and patching checks (2026-11-08)
+
+The following November results describe the earlier strict build merged at
+`b78c21f4`, before the new default. They do not validate the 0.2 behavior change.
 
 The [full workflow](https://github.com/nassim-arifette/piko-tor/actions/runs/42499335203)
 passed for revision `e3d21b5a`, including the companion, fixture and network jobs.
@@ -178,10 +206,10 @@ version code `2147483647`.
 On an Android 14 Xiaomi, Morphe Manager 2.5.0 also rebuilt all 72 patches using
 the existing signing key. X and the locally signed companion installed successfully
 with distinct UIDs. X's Tor settings detected and opened the companion, and app
-association succeeded. The VPN remained stopped; this installation/UI check does
-not validate authenticated X traffic through Tor. Details are in the dated report.
+association succeeded. The subsequent physical-device network checks are described
+below and in the dated report.
 
-### Current bounded network checks (2026-11-08)
+### Prior strict-mode emulator checks (2026-11-08)
 
 The independent diagnostic app on Android 15/API 35 obtained `IsTor=true`, successful
 DNS and IPv4/IPv6 TCP connections, with zero measured physical-interface packet
@@ -202,8 +230,29 @@ of direct IPv6 leakage on an IPv6-capable underlying network. UID counters may m
 DNS sent by Android's `netd`; synthetic UDP is not real QUIC. These are measured
 diagnostic-app scenarios, not exhaustive coverage of X or its auxiliary processes.
 The [validation report](../docs/validation/2026-11-08-piko-tor.md) records the exact
-APK hash and evidence. No authenticated X behavior or physical-device installation
-is claimed by these emulator results.
+APK hash and evidence. The emulator results are separate from the real-X checks
+below.
+
+### Prior strict-mode physical-device X checks (2026-11-08)
+
+On the Android 14 Xiaomi, the real installed X app (`com.twitter.android`, UID
+`10428`) opened its own `BrowserActivity` and `android.webkit.WebView`. A fresh
+Tor-check URL returned `IsTor=true` while Android reported `app.piko.tor` as the
+always-on VPN with lockdown enabled. Native profile screens loaded, an image was
+visible and two observations showed video playback progressing. A fresh search
+through X's normal UI returned four result rows and no error nodes. Initial
+`twitter://search` deep links failed; the successful normal-UI search does not
+support attributing that deep-link failure to Tor.
+
+Stopping the companion through its UI retained Android always-on/lockdown and
+removed the TUN. A new URL in X's WebView produced `ERR_NETWORK_ACCESS_DENIED`;
+a fresh native search returned no rows and two error nodes. This was a manual-stop
+test on the phone, separate from the emulator's process-kill test.
+
+These observations exercise the real X app. They do not provide packet-level
+attribution for all native traffic, DNS, IPv6, QUIC or auxiliary processes, nor do
+they establish full login, messaging, notification or media coverage. Screenshots,
+Tor exit addresses and account metadata remain local.
 
 ### Historical build checks (2026-10-19)
 

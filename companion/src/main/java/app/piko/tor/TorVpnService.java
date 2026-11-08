@@ -29,6 +29,8 @@ public final class TorVpnService extends VpnService {
     static final String STOP = "app.piko.tor.STOP";
     private static volatile ProtectionState currentState = ProtectionState.OFF;
     private static volatile boolean serviceActive;
+    private static volatile boolean alwaysOnEnabled;
+    private static volatile boolean lockdownEnabled;
     private ProtectionState notifiedState;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private ParcelFileDescriptor tun;
@@ -44,10 +46,13 @@ public final class TorVpnService extends VpnService {
 
     static ProtectionState state() { return currentState; }
     static boolean active() { return serviceActive || TorEngine.hasWorker(); }
+    static boolean alwaysOn() { return alwaysOnEnabled; }
+    static boolean lockdown() { return lockdownEnabled; }
 
     @Override public void onCreate() {
         super.onCreate();
         serviceActive = true;
+        updateSystemSettings();
         getSystemService(NotificationManager.class).createNotificationChannel(
                 new NotificationChannel("tor", getString(R.string.app_name), NotificationManager.IMPORTANCE_LOW));
     }
@@ -102,6 +107,12 @@ public final class TorVpnService extends VpnService {
 
     private boolean networkAvailable;
 
+    private void updateSystemSettings() {
+        // Informational only: per-app Tor does not require Android's profile-wide lockdown.
+        alwaysOnEnabled = isAlwaysOn();
+        lockdownEnabled = isLockdownEnabled();
+    }
+
     private boolean strictPrivateDns() {
         networkAvailable = false;
         boolean strictDns = false;
@@ -121,9 +132,10 @@ public final class TorVpnService extends VpnService {
     private final Runnable tick = new Runnable() {
         @Override public void run() {
             if (destroyed || revoked || !requested || target == null) return;
+            updateSystemSettings();
             currentState = ProtectionState.evaluate(requested, target.valid(TorVpnService.this),
                     tun != null && !revoked && prepare(TorVpnService.this) == null,
-                    isAlwaysOn(), isLockdownEnabled(), strictPrivateDns(), failed, ready, networkAvailable);
+                    strictPrivateDns(), failed, ready, networkAvailable);
             if (destroyed || revoked) return;
             permitSockets = currentState.permitsEngine();
             if (!permitSockets && started) {
@@ -164,7 +176,7 @@ public final class TorVpnService extends VpnService {
         return new OnionMasqJni.Listener() {
             @Override public boolean protect(int socket) {
                 return generation == engineGeneration && !destroyed && !revoked && permitSockets
-                        && isAlwaysOn() && isLockdownEnabled() && TorVpnService.this.protect(socket);
+                        && TorVpnService.this.protect(socket);
             }
 
             @Override public int owner(int protocol, byte[] source, int sourcePort, byte[] destination, int destinationPort) {
