@@ -16,6 +16,7 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowConnectivityManager;
 import org.robolectric.shadows.ShadowNetwork;
+import org.robolectric.shadows.ShadowNetworkCapabilities;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 35)
@@ -30,13 +31,13 @@ public class VpnConflictTest {
     }
 
     @Test public void visibleVpnAlongsideWifiIsDetected() {
-        addNetwork(1, new NetworkCapabilities().addTransportType(NetworkCapabilities.TRANSPORT_WIFI));
-        addNetwork(2, new NetworkCapabilities().addTransportType(NetworkCapabilities.TRANSPORT_VPN));
+        addNetwork(1, capabilities(NetworkCapabilities.TRANSPORT_WIFI));
+        addNetwork(2, capabilities(NetworkCapabilities.TRANSPORT_VPN));
         assertTrue(VpnConflict.hasVisibleVpn(context));
     }
 
     @Test public void wifiAloneDoesNotReportConflict() {
-        addNetwork(1, new NetworkCapabilities().addTransportType(NetworkCapabilities.TRANSPORT_WIFI));
+        addNetwork(1, capabilities(NetworkCapabilities.TRANSPORT_WIFI));
         assertFalse(VpnConflict.hasVisibleVpn(context));
     }
 
@@ -49,5 +50,11 @@ public class VpnConflictTest {
         Network network = ShadowNetwork.newInstance(id);
         connectivity.addNetwork(network, null);
         connectivity.setNetworkCapabilities(network, capabilities);
+    }
+
+    private NetworkCapabilities capabilities(int transport) {
+        NetworkCapabilities capabilities = ShadowNetworkCapabilities.newInstance();
+        shadowOf(capabilities).addTransportType(transport);
+        return capabilities;
     }
 }

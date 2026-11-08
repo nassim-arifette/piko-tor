@@ -30,3 +30,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./gradlew clean buildAndroid
+      - name: Upload patch bundle for validation
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: piko-patches-${{ github.sha }}
+          retention-days: 7
+          path: patches/build/libs/*.mpp
+          if-no-files-found: error

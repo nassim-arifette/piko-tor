@@ -27,6 +27,7 @@ import org.robolectric.shadow.api.Shadow;
 import org.robolectric.shadows.ShadowAlertDialog;
 import org.robolectric.shadows.ShadowConnectivityManager;
 import org.robolectric.shadows.ShadowNetwork;
+import org.robolectric.shadows.ShadowNetworkCapabilities;
 import org.robolectric.shadows.ShadowVpnService;
 import org.robolectric.util.ReflectionHelpers;
 
@@ -102,8 +103,9 @@ public class MainActivityVpnConsentTest {
         ShadowConnectivityManager connectivity = shadowOf(activity.getSystemService(ConnectivityManager.class));
         Network network = ShadowNetwork.newInstance(42);
         connectivity.addNetwork(network, null);
-        connectivity.setNetworkCapabilities(network,
-                new NetworkCapabilities().addTransportType(NetworkCapabilities.TRANSPORT_VPN));
+        NetworkCapabilities capabilities = ShadowNetworkCapabilities.newInstance();
+        shadowOf(capabilities).addTransportType(NetworkCapabilities.TRANSPORT_VPN);
+        connectivity.setNetworkCapabilities(network, capabilities);
 
         ReflectionHelpers.callInstanceMethod(activity, "prepareVpn");
 
