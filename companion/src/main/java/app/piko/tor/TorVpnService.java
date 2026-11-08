@@ -53,6 +53,7 @@ public final class TorVpnService extends VpnService {
     }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
+        if (destroyed) return START_NOT_STICKY;
         startForeground(1, notification());
         String action = intent == null ? null : intent.getAction();
         if (STOP.equals(action)) {
@@ -66,13 +67,12 @@ public final class TorVpnService extends VpnService {
             TargetConfig.preferences(this).edit().putBoolean("requested", true).apply();
         }
         requested = TargetConfig.preferences(this).getBoolean("requested", false);
-        if (!requested) {
-            shutdown(ProtectionState.OFF);
+        if (!requested || revoked) {
+            shutdown(requested ? ProtectionState.VPN_MISSING : ProtectionState.OFF);
             stopSelf();
             return START_NOT_STICKY;
         }
         serviceActive = true;
-        revoked = prepare(this) != null;
         if (target == null) target = TargetConfig.load(this);
         if (REFRESH.equals(action)) {
             failed = false;
@@ -85,7 +85,8 @@ public final class TorVpnService extends VpnService {
     }
 
     private void ensureTunnel() {
-        if (tun != null || !target.valid(this) || prepare(this) != null) return;
+        if (destroyed || revoked || tun != null || target == null
+                || !target.valid(this) || prepare(this) != null) return;
         try {
             tun = new Builder().setSession(getString(R.string.app_name))
                     .setConfigureIntent(openApp()).setMtu(1500)
@@ -119,10 +120,11 @@ public final class TorVpnService extends VpnService {
 
     private final Runnable tick = new Runnable() {
         @Override public void run() {
-            if (destroyed || !requested) return;
+            if (destroyed || revoked || !requested || target == null) return;
             currentState = ProtectionState.evaluate(requested, target.valid(TorVpnService.this),
                     tun != null && !revoked && prepare(TorVpnService.this) == null,
                     isAlwaysOn(), isLockdownEnabled(), strictPrivateDns(), failed, ready, networkAvailable);
+            if (destroyed || revoked) return;
             permitSockets = currentState.permitsEngine();
             if (!permitSockets && started) {
                 ready = false;
@@ -136,7 +138,7 @@ public final class TorVpnService extends VpnService {
                     started = TorEngine.start(TorVpnService.this, tun,
                             getCacheDir().getAbsolutePath(), getFilesDir().getAbsolutePath(),
                             listener(generation), () -> handler.post(() -> {
-                                if (!destroyed && generation == engineGeneration) {
+                                if (!destroyed && !revoked && generation == engineGeneration) {
                                     started = false;
                                     ready = false;
                                     failed = true;
@@ -147,6 +149,7 @@ public final class TorVpnService extends VpnService {
                     ready = false;
                 }
             }
+            if (destroyed || revoked) return;
             if (currentState != notifiedState) {
                 getSystemService(NotificationManager.class).notify(1, notification());
                 notifiedState = currentState;
@@ -156,6 +159,8 @@ public final class TorVpnService extends VpnService {
     };
 
     private OnionMasqJni.Listener listener(int generation) {
+        // Native callbacks run off the main thread: do not read the mutable target there.
+        int targetUid = target.uid;
         return new OnionMasqJni.Listener() {
             @Override public boolean protect(int socket) {
                 return generation == engineGeneration && !destroyed && !revoked && permitSockets
@@ -163,8 +168,8 @@ public final class TorVpnService extends VpnService {
             }
 
             @Override public int owner(int protocol, byte[] source, int sourcePort, byte[] destination, int destinationPort) {
-                return generation == engineGeneration
-                        ? connectionOwner(protocol, source, sourcePort, destination, destinationPort) : -1;
+                return generation == engineGeneration && !destroyed && !revoked && permitSockets
+                        ? connectionOwner(targetUid, protocol, source, sourcePort, destination, destinationPort) : -1;
             }
 
             @Override public void event(String json) {
@@ -178,20 +183,20 @@ public final class TorVpnService extends VpnService {
                 }
                 boolean value = bootstrapReady;
                 handler.post(() -> {
-                    if (!destroyed && permitSockets && generation == engineGeneration) ready = value;
+                    if (!destroyed && !revoked && permitSockets && generation == engineGeneration) ready = value;
                 });
             }
         };
     }
 
-    private int connectionOwner(int protocol, byte[] source, int sourcePort,
+    private int connectionOwner(int targetUid, int protocol, byte[] source, int sourcePort,
             byte[] destination, int destinationPort) {
         if (destroyed || (protocol != OsConstants.IPPROTO_TCP && protocol != OsConstants.IPPROTO_UDP)) return -1;
         try {
             int uid = getSystemService(ConnectivityManager.class).getConnectionOwnerUid(protocol,
                     new InetSocketAddress(InetAddress.getByAddress(source), sourcePort),
                     new InetSocketAddress(InetAddress.getByAddress(destination), destinationPort));
-            return uid == target.uid ? uid : -1;
+            return uid == targetUid ? uid : -1;
         } catch (Exception ignored) {
             return -1;
         }
@@ -210,9 +215,19 @@ public final class TorVpnService extends VpnService {
     @Override public IBinder onBind(Intent intent) { return super.onBind(intent); }
 
     @Override public void onRevoke() {
+        // Android may invoke this on a Binder thread. Deny native callbacks immediately,
+        // then serialize resource teardown with onStartCommand, tick and onDestroy.
+        // Revocation is terminal for this instance, including while it remains bound.
         revoked = true;
-        shutdown(requested ? ProtectionState.VPN_MISSING : ProtectionState.OFF);
-        stopSelf();
+        permitSockets = false;
+        ready = false;
+        Runnable stopRevoked = () -> {
+            if (destroyed) return;
+            shutdown(requested ? ProtectionState.VPN_MISSING : ProtectionState.OFF);
+            stopSelf();
+        };
+        if (Looper.myLooper() == handler.getLooper()) stopRevoked.run();
+        else handler.post(stopRevoked);
     }
 
     private void shutdown(ProtectionState state) {

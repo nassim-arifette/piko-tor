@@ -8,7 +8,7 @@
 
 ## 1. Context, architecture choice and absolute priority
 
-- **Fork repository:** https://github.com/nassim-arifette/piko
+- **Fork repository:** https://github.com/nassim-arifette/piko-tor
 - **Existing project:** Piko is a set of Morphe patches for the Twitter/X and Instagram Android apps. Morphe applies the patches to the APK/APKM; Piko itself is not the patching engine.
 - **Initial scope:** X only, not Instagram.
 - **Target feature:** an optional Piko patch (working name: `TorNetworkPatch`) giving access to Tor controls in X's settings.

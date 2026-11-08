@@ -4,6 +4,19 @@ plugins {
     id("com.android.application")
 }
 
+fun sha256(file: java.io.File): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    file.inputStream().buffered().use { input ->
+        val buffer = ByteArray(64 * 1024)
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            digest.update(buffer, 0, count)
+        }
+    }
+    return digest.digest().joinToString("") { "%02x".format(it) }
+}
+
 val supportedAbis = setOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
 val torAbis = providers.gradleProperty("torAbis")
     .map { it.split(',').toSet() }.getOrElse(supportedAbis)
@@ -32,6 +45,22 @@ android {
         }
     }
     lint { abortOnError = true }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        unitTests.all {
+            it.jvmArgs(
+                "--add-opens=java.base/java.lang=ALL-UNNAMED",
+                "--add-opens=java.base/java.util=ALL-UNNAMED",
+                "--add-opens=java.base/java.io=ALL-UNNAMED",
+                "--add-opens=java.base/java.net=ALL-UNNAMED",
+                "--add-opens=java.base/java.security=ALL-UNNAMED",
+                "--add-opens=java.base/java.text=ALL-UNNAMED",
+                "--add-opens=java.base/jdk.internal.access=ALL-UNNAMED",
+                "--add-opens=java.desktop/java.awt.font=ALL-UNNAMED",
+                "--add-opens=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED",
+            )
+        }
+    }
 }
 
 val verifyTorNative = tasks.register("verifyTorNative") {
@@ -46,8 +75,7 @@ val verifyTorNative = tasks.register("verifyTorNative") {
         torAbis.forEach { abi ->
             check(dir.resolve("$abi/libonionmasq_mobile.so").isFile) { "Missing Onionmasq ABI: $abi" }
         }
-        val patchDigest = MessageDigest.getInstance("SHA-256").digest(file("native/privacy.patch").readBytes())
-            .joinToString("") { "%02x".format(it) }
+        val patchDigest = sha256(file("native/privacy.patch"))
         check(dir.resolve("privacy-patch.sha256").readText().trim() == patchDigest) {
             "Native privacy patch changed; rebuild the native libraries."
         }
@@ -57,8 +85,7 @@ val verifyTorNative = tasks.register("verifyTorNative") {
         }
         torAbis.forEach { abi ->
             val path = "$abi/libonionmasq_mobile.so"
-            val digest = MessageDigest.getInstance("SHA-256").digest(dir.resolve(path).readBytes())
-            check(digest.joinToString("") { "%02x".format(it) } == checksums[path]) {
+            check(sha256(dir.resolve(path)) == checksums[path]) {
                 "Native library changed since ELF verification: $abi"
             }
         }
@@ -76,4 +103,5 @@ tasks.configureEach {
 
 dependencies {
     testImplementation(libs.junit)
+    testImplementation("org.robolectric:robolectric:4.17")
 }

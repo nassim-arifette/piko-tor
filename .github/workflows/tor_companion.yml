@@ -6,9 +6,20 @@ on:
     branches: [main, dev]
     paths:
       - 'companion/**'
+      - 'extensions/twitter/src/main/java/app/morphe/extension/twitter/settings/**'
+      - 'patches/src/main/kotlin/app/crimera/patches/twitter/misc/tor/**'
+      - 'patches/src/main/kotlin/app/crimera/patches/twitter/misc/settings/**'
+      - 'patches/src/main/kotlin/app/crimera/patches/twitter/misc/extension/**'
+      - 'patches/src/main/kotlin/app/crimera/patches/twitter/utils/**'
+      - 'patches/src/main/resources/addresources/**/twitter/**'
+      - 'patches/src/main/resources/twitter/settings/**'
       - 'scripts/**'
+      - 'validation/android/**'
       - 'gradle/**'
-      - 'settings.gradle.kts'
+      - '**/*.gradle.kts'
+      - 'gradle.properties'
+      - 'gradlew'
+      - 'gradlew.bat'
       - '.github/workflows/tor_companion.yml'
 
 permissions:
@@ -27,17 +38,136 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - name: Restore verified native libraries and notices
+        id: native-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          # Exact input matches only; never reuse native outputs from a fallback key.
+          key: tor-native-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-tor-native.sh', 'scripts/setup-tor-android.sh', 'scripts/verify-tor-native.py', 'scripts/tor-notices.py', 'companion/native/**', 'LICENSE', 'NOTICE') }}
+          path: |
+            companion/build/generated/jniLibs
+            companion/build/generated/assets/licenses
       - name: Install pinned Android and Rust tools
+        if: steps.native-cache.outputs.cache-hit != 'true'
         run: |
           printf '%s\n' y y y y y y y y y y | scripts/setup-tor-android.sh
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Install Android SDK for cached native libraries
+        if: steps.native-cache.outputs.cache-hit == 'true'
+        run: |
+          printf '%s\n' y y y y y y y y y y | \
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_HOME" \
+            'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
       - name: Build and verify all native ABIs and notices
+        if: steps.native-cache.outputs.cache-hit != 'true'
         run: scripts/build-tor-native.sh
-      - name: Compile APK, unit tests and lint
+      - name: Save verified native libraries and notices
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          key: ${{ steps.native-cache.outputs.cache-primary-key }}
+          path: |
+            companion/build/generated/jniLibs
+            companion/build/generated/assets/licenses
+      - name: Build APK, run unit tests and lint
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./gradlew --no-daemon :companion:assembleDebug :companion:testDebugUnitTest :companion:lintDebug
+        run: ./gradlew --no-daemon --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx2g' :companion:verifyTorNative :companion:assembleDebug :companion:testDebugUnitTest :companion:lintDebug
+      - name: Build patch bundle
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./gradlew --no-daemon --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx2g' buildAndroid
       - name: Check APK alignment and signature
         run: |
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 companion/build/outputs/apk/debug/companion-debug.apk
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify companion/build/outputs/apk/debug/companion-debug.apk
+      - name: Upload validation artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: piko-tor-validation-${{ github.sha }}
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            patches/build/libs/*.mpp
+            patches/build/reports/tests/
+            patches/build/test-results/
+            companion/build/outputs/apk/debug/*.apk
+            companion/build/reports/
+            companion/build/test-results/
+            companion/build/generated/jniLibs/
+            companion/build/generated/assets/licenses/
+
+  fixtures:
+    name: Build network diagnostic fixtures
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Compile independent diagnostic fixtures
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;36.0.0'
+          bash validation/android/build-probe.sh
+          python3 -m unittest discover -s validation/android -p 'test_*.py' -v
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: piko-tor-fixtures-${{ github.sha }}
+          retention-days: 7
+          path: |
+            validation/android/build/probe.apk
+            validation/android/build/vpn-setup.zip
+
+  network:
+    name: Android 15 isolated network checks
+    needs: [companion, fixtures]
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Download APK from this build
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: piko-tor-validation-${{ github.sha }}
+          path: .
+      - name: Download diagnostic fixtures
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: piko-tor-fixtures-${{ github.sha }}
+          path: validation/android/build
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Exercise Tor, retained TUN and Android lockdown
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        env:
+          PIKO_DISPOSABLE_EMULATOR: '1'
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          ram-size: 2048M
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot -dns-server 1.1.1.1,8.8.8.8
+          script: python3 validation/android/run-network-checks.py --serial emulator-5554 --companion companion/build/outputs/apk/debug/companion-debug.apk --output validation/android/artifacts
+      - name: Upload bounded network evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: piko-tor-network-${{ github.sha }}
+          path: validation/android/artifacts/
+          retention-days: 7
+          if-no-files-found: warn
