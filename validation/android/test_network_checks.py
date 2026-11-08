@@ -96,6 +96,42 @@ class RoutingModeEvidenceTest(unittest.TestCase):
             with self.subTest(change=change), self.assertRaises(module.Incomplete):
                 module.require_direct(entry)
 
+    def test_invalid_dns_control_still_requires_all_literal_transport_evidence(self):
+        entry = self.direct_entry()
+        entry["results"] = entry["results"][1:]
+        module.require_direct(entry, tor_check=False)
+        with self.assertRaises(module.Incomplete):
+            module.require_direct(entry)
+        entry["results"][0]["success"] = False
+        with self.assertRaises(module.Incomplete):
+            module.require_direct(entry, tor_check=False)
+
+    def test_direct_after_crash_is_expected_only_without_lockdown(self):
+        entry = self.direct_entry()
+        entry.update(tun=[], tun_observation_samples=4, tun_reappeared=False, tun_monitor_errors=[])
+        module.require_crash_evidence(entry, strict=False)
+        with self.assertRaises(module.Regression):
+            module.require_crash_evidence(entry, strict=True)
+
+    def test_crash_interval_requires_actual_absence_samples(self):
+        for field, value in (("tun_observation_samples", 0), ("tun_reappeared", True),
+                             ("tun_monitor_errors", ["adb_monitor_failed"]), ("tun", ["tun0"])):
+            entry = self.direct_entry()
+            entry.update(tun=[], tun_observation_samples=4, tun_reappeared=False, tun_monitor_errors=[])
+            entry[field] = value
+            with self.subTest(field=field), self.assertRaises(module.Incomplete):
+                module.require_crash_evidence(entry, strict=False)
+
+    def test_strict_crash_accepts_blocking_with_measured_absent_tun(self):
+        entry = self.direct_entry()
+        entry.update(tun=[], tun_observation_samples=4, tun_reappeared=False, tun_monitor_errors=[])
+        entry["physical_uid_packets"] = {"iptables": 0, "ip6tables": 0}
+        for result in entry["results"]:
+            result.update(success=False, host_received=0)
+        module.require_crash_evidence(entry, strict=True)
+        with self.assertRaises(module.Incomplete):
+            module.require_crash_evidence(entry, strict=False)
+
 
 class SeparateFixtureTest(unittest.TestCase):
     def test_control_manifest_keeps_real_classes_but_uses_its_own_uid_package(self):

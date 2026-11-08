@@ -58,7 +58,7 @@ Explain the intended states in plain language:
 
 Only display a claim such as "protected" if its exact meaning is supported by reliable current signals and device evidence. Do not promise anonymity, complete DNS/IPv6/native-process coverage, or zero leak risk. Even through Tor, X can recognize the logged-in account and its actions; the ISP normally sees Tor connectivity.
 
-Published artifacts and unpublished source must be distinguished. The existing 3.9.0-tor.2 release uses the older strict behavior; do not imply it contains the new ON/OFF default or subsequent safeguards. Keep download links pointing to real artifacts until a new release exists.
+Published artifacts and unpublished source must be distinguished. The current release candidate is bundle 3.10.0-tor.1 with companion 0.2.0-experimental (version code 2); publication and final validation remain pending until actual results are recorded. The existing 3.9.0-tor.2 release uses the older strict behavior; do not imply it contains the new ON/OFF default or subsequent safeguards. Keep the public manifest/download links on existing artifacts until the new release is published and its assets verified. Build the final version into the bundle rather than relabeling a development artifact. Sign companion updates with the persistent companion key and document any older public APK signer incompatibility; X retains its own Morphe signing key. Never publish private keys or signing credentials.
 
 ## 5. Working method and validation
 

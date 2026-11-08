@@ -72,7 +72,7 @@ jobs:
       - name: Build APK, run unit tests and lint
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./gradlew --no-daemon --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx2g' :companion:verifyTorNative :companion:assembleDebug :companion:testDebugUnitTest :companion:lintDebug
+        run: ./gradlew --no-daemon --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx2g' :companion:verifyTorNative :companion:assembleDebug :companion:assembleRelease :companion:testDebugUnitTest :companion:lintDebug :companion:lintRelease
       - name: Build patch bundle
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -81,6 +81,7 @@ jobs:
         run: |
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 companion/build/outputs/apk/debug/companion-debug.apk
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify companion/build/outputs/apk/debug/companion-debug.apk
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 companion/build/outputs/apk/release/companion-release-unsigned.apk
       - name: Upload validation artifacts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -93,6 +94,7 @@ jobs:
             patches/build/reports/tests/
             patches/build/test-results/
             companion/build/outputs/apk/debug/*.apk
+            companion/build/outputs/apk/release/*.apk
             companion/build/reports/
             companion/build/test-results/
             companion/build/generated/jniLibs/

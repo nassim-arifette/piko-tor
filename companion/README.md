@@ -2,13 +2,16 @@
 
 **The requested default has changed:** Tor ON sends X through Tor while other apps
 keep their ordinary network; Tor OFF restores X's ordinary direct network.
-The companion 0.2 development revision (version code 2) is unpublished, and its
-**build, default-mode network and physical-device validation are PENDING**.
+The companion `0.2.0-experimental` release candidate (version code 2) is unpublished.
+**Publication and final validation are PENDING.** No result for an earlier build
+certifies this final release candidate.
 
 The source includes upstream Piko 3.10.0, with bundle version
-`3.10.0-tor.1-dev.2`. The published `3.9.0-tor.2` bundle and companion
+`3.10.0-tor.1`. The published `3.9.0-tor.2` bundle and companion
 `0.1.0-experimental` still use the older strict behavior. `patches-bundle.json`
-and X's download link select that existing release, not this new default.
+selects that existing release, not this new default. The current X patch requires
+companion version code 2 or newer and opens this installation guide when the app
+is missing or outdated; it does not offer the old APK as a compatible update.
 The [dated report](../docs/validation/2026-11-08-piko-tor.md) separates the pending
 revision from earlier strict-mode evidence.
 
@@ -65,7 +68,7 @@ user's DNS policy to restore connectivity.
 
 ## Development setup on a test device
 
-The steps below target the **unpublished 0.2 revision**. The old published download
+The steps below target the **unpublished 0.2 release candidate**. The old published download
 does not provide this default.
 
 1. Build the development companion and patch bundle using the instructions below;
@@ -115,10 +118,33 @@ Use one Piko source for X and enable **Tor network companion** in expert mode.
 
 That legacy companion requires Android Always-on VPN and lockdown to start its
 engine. It can block the rest of the profile and leave X blocked after stopping;
-it is not the new ON/OFF experience. X's current download link still opens this
-existing APK after confirmation. No new release or prepatched X APK is implied by
+it is not the new ON/OFF experience. X patched with that legacy bundle offers its
+legacy APK; the new patch opens installation instructions and refuses to open a
+version-code-1 companion. No new release or prepatched X APK is implied by
 the source changes. Published debug signing/checksums do not independently
 authenticate a publisher.
+
+### Signing and migration for the release candidate
+
+The downloaded public `0.1.0-experimental` APK was verified against its release
+SHA-256 and has certificate fingerprint
+`7cb77ebdbbd49e40f8f447100b99958788274e8d5c12cf0375649ffe446d9456`.
+The persistent companion key used for the existing local phone installation has
+fingerprint `b1fa54b0d1876c71b26586ced20d78aab26716b2dcd812f7c0f207177c996866`.
+The release candidate is intended to use that persistent key. Final signing and
+publication must still be verified.
+
+These certificates differ, and no signing-key rotation lineage is configured.
+A new APK signed with the persistent key can preserve update continuity for the
+matching local installation, but cannot normally update the old public debug-signed
+companion in place. This affects `app.piko.tor`, not the separately signed X app.
+
+For an old public installation that Android rejects as an incompatible update,
+stop the legacy companion and turn off its old Always-on/lockdown settings before
+replacing only the companion. Removing it loses its saved pairing/settings; pair X
+and grant VPN consent again afterward. **Do not uninstall X or clear X's data for
+this companion migration.** An installation already using the persistent certificate
+should use an in-place update instead. Keep the new normal mode's system options off.
 
 ## Build (Linux x86_64)
 
@@ -137,13 +163,17 @@ export PATH="$HOME/.cargo/bin:$PATH"
 scripts/build-tor-native.sh
 # Run these sequentially to bound Gradle memory, as in the passing CI job.
 ./gradlew --no-daemon --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx2g' \
-  :companion:verifyTorNative :companion:assembleDebug :companion:testDebugUnitTest :companion:lintDebug
+  :companion:verifyTorNative :companion:assembleDebug :companion:assembleRelease :companion:testDebugUnitTest :companion:lintDebug :companion:lintRelease
 ./gradlew --no-daemon --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx2g' buildAndroid
 ```
 
-Outputs: `patches/build/libs/*.mpp` and
-`companion/build/outputs/apk/debug/companion-debug.apk`. Debug keys are test-only,
-not a stable production signing identity. No production release is configured.
+Outputs: `patches/build/libs/patches-3.10.0-tor.1.mpp`,
+`companion/build/outputs/apk/debug/companion-debug.apk` and
+`companion/build/outputs/apk/release/companion-release-unsigned.apk`.
+The debug APK is for tests. The release APK must be signed separately with the
+persistent companion key; CI does not supply that private key. Preserve the same
+certificate for in-place companion updates, then verify the final signature and
+16 KiB alignment. X keeps its own Morphe signing identity.
 For a smaller development APK, use matching native/Gradle ABI selections, e.g.
 `scripts/build-tor-native.sh arm64-v8a` and `-PtorAbis=arm64-v8a`.
 
@@ -163,7 +193,7 @@ To apply only the optional patch to the supported X bundle with Morphe Desktop
 
 ```sh
 java -jar morphe-desktop-2.1.1-all.jar patch --exclusive \
-  -p patches/build/libs/patches-3.10.0-tor.1-dev.2.mpp -e 'Tor network companion' \
+  -p patches/build/libs/patches-3.10.0-tor.1.mpp -e 'Tor network companion' \
   -o x-piko-tor.apk X-12.19.1-release.0.apkm
 ```
 
@@ -174,14 +204,20 @@ runtime behavior.
 
 ## Validation evidence and remaining gates
 
-### New default — validation pending
+### Release candidate — publication and validation pending
 
-The 0.2 development revision changes the routing policy. Its build, unit tests,
+The 0.2 release candidate changes the routing policy. Its final build, unit tests,
 emulator checks and real-device ON/OFF checks are **PENDING**. Required evidence
 includes X using Tor while another app remains direct, explicit OFF restoring
 direct X traffic, and engine suspension retaining the TUN without a direct fallback.
 Unexpected tunnel loss must be measured with system lockdown off and reported
 honestly; the earlier strict-mode block cannot be assumed in that configuration.
+
+The intended experimental release contains `patches-3.10.0-tor.1.mpp`, the signed
+`piko-tor-0.2.0-experimental.apk` and `SHA256SUMS`, with sources in tag
+`v3.10.0-tor.1`. Publication is pending; the existing manifest and download remain
+on the legacy release until the new assets are available. A checksum records file
+integrity, not an independent publisher identity.
 
 ### Prior strict build and patching checks (2026-11-08)
 

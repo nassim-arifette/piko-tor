@@ -5,7 +5,7 @@
     <string name="piko_tor_download">Install Piko Tor</string>
     <string name="piko_tor_update">Update Piko Tor</string>
     <string name="piko_tor_install_instructions">Installation instructions</string>
-    <string name="piko_tor_download_warning">These X-only Tor controls require Piko Tor 0.2 or newer. Version 0.1 requires Android VPN lockdown and is incompatible with this mode. Version 0.2 is currently a development build, not a published release. Open the project installation instructions to obtain the appropriate APK. Android will ask you to confirm installation. No installation or VPN setting is changed automatically.</string>
+    <string name="piko_tor_download_warning">Install experimental Piko Tor 0.2 or newer using the project instructions. Version 0.1 is incompatible with X-only ON/OFF. Tor ON routes only X through Tor; Tor OFF restores its normal connection, unless Android VPN settings block it. Android asks you to confirm installation. No VPN setting is changed automatically.</string>
     <string name="piko_tor_download_failed">Cannot open the installation instructions. Visit github.com/nassim-arifette/piko-tor and read companion/README.md. Piko Tor 0.2 or newer is required.</string>
     <string name="piko_tor_outdated">Incompatible companion installed: %s. Update to Piko Tor 0.2 or newer for X-only Tor ON/OFF. The older companion will not be opened by these controls.</string>
     <string name="piko_tor_installed">Companion installed: %s</string>

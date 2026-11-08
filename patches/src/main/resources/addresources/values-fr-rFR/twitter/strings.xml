@@ -5,7 +5,7 @@
     <string name="piko_tor_download">Installer Piko Tor</string>
     <string name="piko_tor_update">Mettre à jour Piko Tor</string>
     <string name="piko_tor_install_instructions">Instructions d’installation</string>
-    <string name="piko_tor_download_warning">Ces commandes Tor réservées à X nécessitent Piko Tor 0.2 ou plus récent. La version 0.1 impose le blocage VPN Android et est incompatible avec ce mode. La version 0.2 est actuellement une version de développement, pas une version publiée. Ouvrez les instructions du projet pour obtenir le bon APK. Android vous demandera de confirmer l’installation. Aucune installation ni modification des paramètres VPN n’est automatique.</string>
+    <string name="piko_tor_download_warning">Installez Piko Tor expérimental 0.2 ou plus récent en suivant les instructions du projet. La version 0.1 est incompatible avec le mode réservé à X. Tor activé : seul X passe par Tor. Tor désactivé : X retrouve sa connexion normale, sauf si les paramètres VPN Android la bloquent. Android demande de confirmer l’installation. Aucun paramètre VPN n’est modifié automatiquement.</string>
     <string name="piko_tor_download_failed">Impossible d’ouvrir les instructions d’installation. Consultez companion/README.md sur github.com/nassim-arifette/piko-tor. Piko Tor 0.2 ou plus récent est nécessaire.</string>
     <string name="piko_tor_outdated">Compagnon installé incompatible : %s. Mettez-le à jour vers Piko Tor 0.2 ou plus récent pour activer et désactiver Tor uniquement pour X. Ces commandes n’ouvriront pas l’ancien compagnon.</string>
     <string name="piko_tor_installed">Compagnon installé : %s</string>

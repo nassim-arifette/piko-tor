@@ -248,18 +248,34 @@ def require_mode(state: dict, strict: bool) -> None:
         raise Regression("Unexpected Android VPN mode: " + json.dumps(state, sort_keys=True))
 
 
-def require_direct(entry: dict) -> None:
+def require_direct(entry: dict, tor_check: bool = True) -> None:
     """Positive evidence for a UID that should use the ordinary network now."""
     results = {item["operation"]: item for item in entry["results"]}
-    for operation in ("tor", "tcp4", "local_tcp", "udp"):
+    operations = ("tor", "tcp4", "local_tcp", "udp") if tor_check else ("tcp4", "local_tcp", "udp")
+    for operation in operations:
         if not results.get(operation, {}).get("success"):
             raise Incomplete(entry["name"] + ": required direct control failed: " + operation)
-    if results["tor"].get("is_tor") is not False:
+    if tor_check and results["tor"].get("is_tor") is not False:
         raise Regression(entry["name"] + ": the direct control unexpectedly used Tor")
     if any(results[operation].get("host_received") != 1 for operation in ("local_tcp", "udp")):
         raise Incomplete(entry["name"] + ": direct host controls lack independent positive evidence")
     if not entry["physical_uid_packets"].get("iptables", 0):
         raise Incomplete(entry["name"] + ": direct UID counter lacks a positive control")
+
+
+def require_crash_evidence(entry: dict, strict: bool) -> None:
+    """A vanished tunnel exposes direct access by default; lockdown changes that expectation."""
+    if strict and (any(entry["physical_uid_packets"].values()) or any(
+            item.get("host_received", 0) or (item.get("operation") == "tor"
+            and item.get("success") and item.get("is_tor") is False) for item in entry["results"])):
+        raise Regression("Direct probe traffic escaped after process crash with Android lockdown")
+    if (entry.get("tun_monitor_errors") or entry.get("tun_reappeared") or entry.get("tun")
+            or entry.get("tun_observation_samples", 0) < 1):
+        raise Incomplete("TUN reappeared or monitoring failed: exact tunnel-absent experiment is inconclusive")
+    if strict:
+        require_blocked(entry)
+    else:
+        require_direct(entry)
 
 
 def stop_through_ui(device: Device) -> None:
@@ -461,6 +477,35 @@ def main() -> int:
                 raise Regression(label + ": probe UID emitted physical-interface packets")
             require_mode(device.vpn("status"), strict)
 
+        def crash_measure(name: str, operations: list[str]) -> dict:
+            pid = device.shell("pidof", COMPANION)
+            if not re.fullmatch(r"\d+", pid):
+                raise Incomplete("Cannot identify a single companion process to crash")
+            device.shell("kill", "-9", pid)
+            wait_for(lambda: not device.tun(), 10, "TUN disappearance after process kill")
+            stop = threading.Event()
+            observed_tuns: list[list[str]] = []
+            monitor_errors: list[str] = []
+            def monitor():
+                while not stop.is_set():
+                    try:
+                        observed_tuns.append(device.tun())
+                    except Incomplete:
+                        monitor_errors.append("adb_monitor_failed")
+                    stop.wait(0.5)
+            watcher = threading.Thread(target=monitor, daemon=True)
+            watcher.start()
+            try:
+                entry = measure(name, operations)
+            finally:
+                stop.set()
+                watcher.join(timeout=65)
+            entry["tun_observation_samples"] = len(observed_tuns)
+            entry["tun_reappeared"] = any(observed_tuns)
+            entry["tun_monitor_errors"] = monitor_errors
+            entry["vpn_state"] = device.vpn("status")
+            return entry
+
         # Default mode: ordinary VPN consent only. The control UID is never paired.
         phase = "per_app"
         require_mode(device.vpn("authorize"), strict=False)
@@ -482,6 +527,41 @@ def main() -> int:
             raise Regression("The per-app TUN disappeared while checking the unselected UID")
         healthy("per_app_target_still_tor_after_control", strict=False)
 
+        # Policy-induced engine stop must retain blocking for the selected UID only.
+        per_app_tun = device.tun_identity()
+        device.shell("settings", "put", "global", "private_dns_specifier", "piko-validation.invalid")
+        device.shell("settings", "put", "global", "private_dns_mode", "hostname")
+        wait_for(lambda: strict_dns_state(device), 60, "per-app engine pause state")
+        if device.tun_identity() != per_app_tun:
+            raise Regression("Per-app engine pause destroyed or replaced the retained TUN")
+        paused_target = measure("per_app_engine_paused_target_blocked",
+                                ["tor", "tcp4", "tcp6", "local_tcp", "udp", "dns"], blocked=True)
+        paused_target["retained_tun_ifindices"] = per_app_tun
+        # The intentionally invalid system DNS also affects unselected apps; use the
+        # already-pinned public IP plus independent host echoes, never a DNS failure.
+        paused_control = measure("per_app_engine_paused_unselected_direct",
+                                 ["tcp4", "local_tcp", "udp"], package=CONTROL)
+        paused_control["https_omitted_reason"] = "deliberately_invalid_system_private_dns"
+        require_direct(paused_control, tor_check=False)
+        if device.tun_identity() != per_app_tun:
+            raise Regression("Per-app paused measurements did not retain the original TUN")
+        require_mode(device.vpn("status"), strict=False)
+        device.shell("settings", "put", "global", "private_dns_mode", "off")
+        device.shell("settings", "delete", "global", "private_dns_specifier")
+        healthy("per_app_recovery_after_engine_pause", strict=False)
+        require_direct(measure("per_app_unselected_direct_after_pause", ["tor", "tcp4", "local_tcp", "udp"],
+                               package=CONTROL))
+
+        # No Android lockdown: unexpected tunnel loss can expose the target directly.
+        lost = crash_measure("per_app_process_kill_direct_exposure", ["tor", "tcp4", "local_tcp", "udp"])
+        require_mode(lost["vpn_state"], strict=False)
+        require_crash_evidence(lost, strict=False)
+        lost["interpretation"] = "expected_direct_exposure_without_android_lockdown"
+        device.shell("am", "start-foreground-service", "-n", COMPANION + "/.TorVpnService",
+                     "-a", "app.piko.tor.START")
+        wait_for(device.tun, 30, "per-app TUN after manual crash recovery")
+        healthy("per_app_manual_recovery_after_process_kill", strict=False)
+
         # An explicit user OFF intentionally returns the selected UID to direct access.
         stop_through_ui(device)
         require_mode(device.vpn("status"), strict=False)
@@ -494,6 +574,8 @@ def main() -> int:
         if off["tun"]:
             raise Regression("A TUN reappeared after ordinary OFF")
         require_direct(off)
+        require_direct(measure("per_app_off_unselected_direct", ["tor", "tcp4", "local_tcp", "udp"],
+                               package=CONTROL))
 
         # Optional strict mode retains the prior crash/pause coverage as a separate phase.
         phase = "optional_strict"
@@ -510,6 +592,8 @@ def main() -> int:
         if "tcp4" not in healthy_ops:
             raise Incomplete("TCP4 positive control does not work through Tor")
         measure("unsupported_local_and_udp_blocked", ["local_tcp", "udp"], blocked=True)
+        measure("optional_strict_unselected_blocked", ["tor", "tcp4", "local_tcp", "udp"],
+                blocked=True, package=CONTROL)
         original_tun = device.tun_identity()
         device.shell("settings", "put", "global", "private_dns_specifier", "piko-validation.invalid")
         device.shell("settings", "put", "global", "private_dns_mode", "hostname")
@@ -528,47 +612,19 @@ def main() -> int:
         device.shell("settings", "delete", "global", "private_dns_specifier")
         healthy("recovery_after_engine_pause")
 
-        pid = device.shell("pidof", COMPANION)
-        if not re.fullmatch(r"\d+", pid):
-            raise Incomplete("Cannot identify a single companion process to crash")
-        device.shell("kill", "-9", pid)
-        wait_for(lambda: not device.tun(), 10, "TUN disappearance after process kill")
-        stop = threading.Event()
-        observed_tuns: list[list[str]] = []
-        monitor_errors: list[str] = []
-        def monitor():
-            while not stop.is_set():
-                try:
-                    observed_tuns.append(device.tun())
-                except Incomplete:
-                    monitor_errors.append("adb_monitor_failed")
-                stop.wait(0.5)
-        watcher = threading.Thread(target=monitor, daemon=True)
-        watcher.start()
-        try:
-            crash = measure("process_kill_lockdown", negative_ops)
-        finally:
-            stop.set()
-            watcher.join(timeout=65)
-        crash["tun_observation_samples"] = len(observed_tuns)
-        crash["tun_reappeared"] = any(observed_tuns)
-        # An automatic safe restart can restore Tor; that invalidates the tunnel-absent
-        # interval, but is not itself a fail-closed regression. Direct egress still fails.
-        if any(crash["physical_uid_packets"].values()) or any(
-                item.get("host_received", 0) or (
-                    item.get("operation") == "tor" and item.get("success")
-                    and item.get("is_tor") is False)
-                for item in crash["results"]):
-            raise Regression("Direct probe traffic escaped after process crash")
-        if monitor_errors or any(observed_tuns):
-            raise Incomplete("TUN reappeared or monitoring failed: exact tunnel-absent experiment is inconclusive")
-        require_blocked(crash)
-        require_mode(device.vpn("status"), strict=True)
+        crash = crash_measure("process_kill_lockdown", negative_ops)
+        require_crash_evidence(crash, strict=True)
+        require_mode(crash["vpn_state"], strict=True)
 
         # Manual recovery is distinct from automatic recovery; do not claim the latter.
         device.shell("am", "start-foreground-service", "-n", COMPANION + "/.TorVpnService",
                      "-a", "app.piko.tor.START")
         healthy("manual_recovery_after_process_kill")
+        stop_through_ui(device)
+        require_mode(device.vpn("status"), strict=True)
+        measure("optional_strict_off_target_blocked", negative_ops, blocked=True)
+        measure("optional_strict_off_unselected_blocked", ["tor", "tcp4", "local_tcp", "udp"],
+                blocked=True, package=CONTROL)
         report["status"] = "passed_bounded_scenarios"
         exit_code = 0
     except Regression as error:

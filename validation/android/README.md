@@ -79,21 +79,39 @@ the process or sockets to a particular network.
    Tor check and continued TUN presence guard against a VPN that stopped before
    the control succeeded. Every HTTPS check uses a fresh nonce and disables caching.
    The JSON preserves no source/exit IP, response body or account information.
-3. **Default per-app OFF.** The runner clicks the companion's ordinary OFF button
+3. **Default per-app engine pause.** Strict Private DNS with a reserved `.invalid`
+   hostname stops the Tor engine through the existing refusal policy. The selected
+   UID's previously working literal IPv4/IPv6 TCP controls and local probes must
+   fail with the original TUN name and kernel ifindex retained, no host receipts
+   and no physical UID output. The unselected UID must still pass literal public
+   IPv4 TCP and host TCP/UDP with physical output. Its HTTPS hostname check is
+   deliberately omitted during the invalid global DNS configuration; it must
+   return `IsTor=false` again after DNS restoration. The target must recover Tor.
+4. **Default per-app process death.** The exact companion PID receives `kill -9`
+   while always-on and lockdown remain off. During a sampled TUN-absent interval,
+   the target must demonstrate fresh `IsTor=false` and direct TCP/UDP positive
+   controls. This records the expected exposure without system lockdown, not a
+   failed kill-switch assertion. Manual restart must recover Tor. If the tunnel
+   reappears during the measurement, the exact interval is inconclusive.
+5. **Default per-app OFF.** The runner clicks the companion's ordinary OFF button
    and confirmation, verifies `requested=false` and TUN disappearance, then requires
    the selected probe to receive a fresh `IsTor=false` response and successful
    direct TCP/UDP positive controls. Always-on and lockdown must still be absent.
+   The unselected UID must also retain its direct positive controls after OFF.
    Killing the service or changing system VPN policy is not used to simulate OFF.
-4. **Optional strict protection.** The runner explicitly enables always-on and
+6. **Optional strict protection.** The runner explicitly enables always-on and
    lockdown, restarts the companion, and verifies a real Tor HTTPS response and
    target TCP controls without physical target-UID output. The following pause and
    crash assertions apply to this optional configuration; they do not imply that
    ordinary per-app mode blocks direct access after a process crash or TUN loss.
-5. **Unsupported/local traffic.** Previously successful host TCP and UDP probes
+   The unselected UID is checked separately and must be blocked, demonstrating
+   this system policy's effect on other applications. After strict-mode manual
+   recovery, ordinary OFF must leave both UIDs blocked while lockdown remains set.
+7. **Unsupported/local traffic.** Previously successful host TCP and UDP probes
    must fail under protection. The host must receive neither token, and physical
    target-UID counters must stay unchanged. This exercises a synthetic UDP
    datagram, not a real QUIC stack. This is checked in both ON configurations.
-6. **Engine paused with the TUN retained.** Strict Private DNS with a reserved
+8. **Optional strict engine pause with the TUN retained.** Strict Private DNS with a reserved
    `.invalid` hostname invokes the companion's existing refusal policy. Its
    visible pause state and unchanged TUN name **and kernel ifindex** are checked;
    recreating an interface under the same `tun0` name is not accepted as retaining
@@ -105,7 +123,7 @@ the process or sockets to a particular network.
    TCP/Tor engine. The runner keeps those test addresses only in memory.
    Restoring the original non-strict mode must recover a real Tor response.
    This is a policy-induced engine stop, not arbitrary native-fault injection.
-7. **Process killed / tunnel absent.** `kill -9` targets the exact companion PID.
+9. **Optional strict process killed / tunnel absent.** `kill -9` targets the exact companion PID.
    The runner waits for TUN disappearance, polls interface presence while probing,
    and verifies lockdown remains configured. Direct UID or host egress fails.
    If the TUN reappears during measurement, the exact tunnel-absent experiment is

@@ -8,9 +8,11 @@ The current development work implements the user's requested default:
   of falling back directly. An unexpected tunnel loss or VPN revocation can let X
   connect directly unless optional Android lockdown is enabled.
 
-The source includes upstream Piko 3.10.0 and bundle version
-`3.10.0-tor.1-dev.2`. The new companion 0.2 development revision (version code 2)
-is unpublished. **Build and device validation of this new default are PENDING.**
+The source includes upstream Piko 3.10.0 and prepares experimental release
+**`3.10.0-tor.1`**, with companion **`0.2.0-experimental`** (version code 2).
+**Publication and final validation are PENDING.** The intended release files are
+`patches-3.10.0-tor.1.mpp`, `piko-tor-0.2.0-experimental.apk` and `SHA256SUMS`;
+they are not yet available from the published source.
 
 Android's **Always-on VPN** and **Block connections without VPN** are optional
 advanced settings, not the default setup. Lockdown can block other apps in the
@@ -19,9 +21,15 @@ automatically. Users who deliberately want that stricter behavior can configure
 it themselves, potentially in a separate Android profile.
 
 The published **3.9.0-tor.2** release still uses the older strict behavior.
-`patches-bundle.json` and the in-app download intentionally point to that existing
-release. **Adding this source to Morphe does not install the new ON/OFF behavior.**
-See the development build instructions to test the unpublished version.
+`patches-bundle.json` still selects that existing release. The current X patch
+requires companion version code 2 or newer and opens the installation guide when
+it is missing or outdated. **Adding the published source to Morphe does not install
+the new ON/OFF behavior.**
+See the build instructions to test the release candidate. The manifest will switch
+to the new version only after its release assets are published and verified.
+The planned companion signing key differs from the old public APK's debug key;
+see the [companion migration notes](companion/README.md#signing-and-migration-for-the-release-candidate)
+before updating an installation of that public legacy APK.
 
 - [Add the published legacy source to Morphe](https://morphe.software/add-source?github=nassim-arifette/piko-tor&name=Piko%20Tor%20experimental)
 - [Published legacy bundle and companion APK](https://github.com/nassim-arifette/piko-tor/releases/tag/v3.9.0-tor.2)
