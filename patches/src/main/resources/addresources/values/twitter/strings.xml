@@ -2,13 +2,16 @@
 <resources>
     <string name="piko_title_tor">Privacy — Tor network</string>
     <string name="piko_tor_open">Open Piko Tor</string>
-    <string name="piko_tor_download">Download Piko Tor</string>
-    <string name="piko_tor_download_warning">Download the experimental companion APK from nassim-arifette/piko on GitHub using your browser. Android will ask you to confirm installation. Installing alone does not protect X: configure always-on VPN and block connections without VPN. If lockdown blocks your browser, transfer the APK from another device; do not disable lockdown to download it. This build is not validated for sensitive use.</string>
-    <string name="piko_tor_download_failed">Cannot open the download. Get the companion APK from github.com/nassim-arifette/piko/releases using another device if necessary. Keep Android VPN lockdown enabled.</string>
+    <string name="piko_tor_download">Install Piko Tor</string>
+    <string name="piko_tor_update">Update Piko Tor</string>
+    <string name="piko_tor_install_instructions">Installation instructions</string>
+    <string name="piko_tor_download_warning">Install experimental Piko Tor 0.2 or newer using the project instructions. Version 0.1 is incompatible with X-only ON/OFF. Tor ON routes only X through Tor; Tor OFF restores its normal connection, unless Android VPN settings block it. Android asks you to confirm installation. No VPN setting is changed automatically.</string>
+    <string name="piko_tor_download_failed">Cannot open the installation instructions. Visit github.com/nassim-arifette/piko-tor and read companion/README.md. Piko Tor 0.2 or newer is required.</string>
+    <string name="piko_tor_outdated">Incompatible companion installed: %s. Update to Piko Tor 0.2 or newer for X-only Tor ON/OFF. The older companion will not be opened by these controls.</string>
     <string name="piko_tor_installed">Companion installed: %s</string>
-    <string name="piko_tor_unverified">Protection unverified in X. Configure the separate companion and Android always-on VPN with lockdown. Experimental; not validated against leaks.</string>
-    <string name="piko_tor_missing">Companion not installed. Install Piko Tor separately; this patch alone does not route or block traffic.</string>
-    <string name="piko_tor_unsupported">Piko Tor requires Android 10 or newer to verify the system lockdown settings.</string>
+    <string name="piko_tor_unverified">Open the companion to turn Tor ON or OFF for X. ON routes only X through Tor; OFF restores its normal connection. State is not verified in X. If the VPN tunnel disappears, X may connect directly. Optional Android VPN lockdown can block other apps.</string>
+    <string name="piko_tor_missing">Companion not installed. Install Piko Tor 0.2 or newer separately; this patch alone does not route or block traffic.</string>
+    <string name="piko_tor_unsupported">Piko Tor requires Android 10 or newer.</string>
     <string name="piko_tor_open_failed">Cannot open Piko Tor. Check its installation and open it from the Android launcher.</string>
     <!-- Settings Search -->
     <string name="piko_settings_search_hint">Search Piko settings</string>

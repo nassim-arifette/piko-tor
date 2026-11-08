@@ -4,13 +4,13 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <application android:label="Piko network probe (test only)" android:debuggable="true"
         android:allowBackup="false" android:usesCleartextTraffic="true">
-        <activity android:name=".ProbeActivity" android:exported="true">
+        <activity android:name="app.piko.tor.probe.ProbeActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
     </application>
-    <instrumentation android:name=".ProbeInstrumentation" android:targetPackage="app.piko.tor.probe"
+    <instrumentation android:name="app.piko.tor.probe.ProbeInstrumentation" android:targetPackage="app.piko.tor.probe"
         android:label="Independent UID network probe" />
 </manifest>

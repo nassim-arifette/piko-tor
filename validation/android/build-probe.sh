@@ -14,17 +14,27 @@ mkdir -p "$out/classes" "$out/dex" "$out/setup-classes" "$out/setup-dex"
 find "$root/java" -name '*.java' -print0 | xargs -0 javac -source 8 -target 8 -classpath "$android_jar" -d "$out/classes"
 jar cf "$out/classes.jar" -C "$out/classes" .
 "$build_tools/d8" --min-api 29 --lib "$android_jar" --output "$out/dex" "$out/classes.jar"
-"$build_tools/aapt" package -f -M "$root/AndroidManifest.xml" -I "$android_jar" -F "$out/probe-unsigned.apk"
-(cd "$out/dex" && "$build_tools/aapt" add "$out/probe-unsigned.apk" classes.dex)
-"$build_tools/zipalign" -f -P 16 4 "$out/probe-unsigned.apk" "$out/probe-aligned.apk"
 if [[ ! -f "$out/probe-test-key.jks" ]]; then
     keytool -genkeypair -keystore "$out/probe-test-key.jks" -storepass android -keypass android \
         -alias probe-test -keyalg RSA -keysize 2048 -validity 30 -dname 'CN=Piko isolated test fixture' >/dev/null
 fi
-"$build_tools/apksigner" sign --ks "$out/probe-test-key.jks" --ks-pass pass:android --key-pass pass:android \
-    --out "$out/probe.apk" "$out/probe-aligned.apk"
-"$build_tools/apksigner" verify "$out/probe.apk"
+# Same DEX and signer, different packages/UIDs. Neither manifest uses sharedUserId.
+for fixture in probe control; do
+    manifest="$root/AndroidManifest.xml"
+    if [[ "$fixture" == control ]]; then
+        # Legacy aapt requires the input basename AndroidManifest.xml even with -M.
+        mkdir -p "$out/control-manifest"
+        cp "$root/ControlAndroidManifest.xml" "$out/control-manifest/AndroidManifest.xml"
+        manifest="$out/control-manifest/AndroidManifest.xml"
+    fi
+    "$build_tools/aapt" package -f -M "$manifest" -I "$android_jar" -F "$out/$fixture-unsigned.apk"
+    (cd "$out/dex" && "$build_tools/aapt" add "$out/$fixture-unsigned.apk" classes.dex)
+    "$build_tools/zipalign" -f -P 16 4 "$out/$fixture-unsigned.apk" "$out/$fixture-aligned.apk"
+    "$build_tools/apksigner" sign --ks "$out/probe-test-key.jks" --ks-pass pass:android --key-pass pass:android \
+        --out "$out/$fixture.apk" "$out/$fixture-aligned.apk"
+    "$build_tools/apksigner" verify "$out/$fixture.apk"
+done
 find "$root/setup" -name '*.java' -print0 | xargs -0 javac -source 8 -target 8 -classpath "$android_jar" -d "$out/setup-classes"
 jar cf "$out/setup-classes.jar" -C "$out/setup-classes" .
 "$build_tools/d8" --min-api 29 --lib "$android_jar" --output "$out/vpn-setup.zip" "$out/setup-classes.jar"
-printf 'Probe APK: %s\nLab setup dex: %s\n' "$out/probe.apk" "$out/vpn-setup.zip"
+printf 'Probe APK: %s\nControl APK: %s\nLab setup dex: %s\n' "$out/probe.apk" "$out/control.apk" "$out/vpn-setup.zip"

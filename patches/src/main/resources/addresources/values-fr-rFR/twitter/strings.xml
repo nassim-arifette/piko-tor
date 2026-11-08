@@ -2,13 +2,16 @@
 <resources>
     <string name="piko_title_tor">Confidentialité — Réseau Tor</string>
     <string name="piko_tor_open">Ouvrir Piko Tor</string>
-    <string name="piko_tor_download">Télécharger Piko Tor</string>
-    <string name="piko_tor_download_warning">Téléchargez l’APK expérimental du compagnon depuis nassim-arifette/piko sur GitHub avec votre navigateur. Android vous demandera de confirmer l’installation. Installer ne protège pas X : configurez le VPN permanent et le blocage des connexions sans VPN. Si le verrouillage bloque le navigateur, transférez l’APK depuis un autre appareil ; ne désactivez pas le verrouillage pour le télécharger. Cette version n’est pas validée pour un usage sensible.</string>
-    <string name="piko_tor_download_failed">Impossible d’ouvrir le téléchargement. Récupérez l’APK compagnon sur github.com/nassim-arifette/piko/releases depuis un autre appareil si nécessaire. Gardez le verrouillage VPN Android activé.</string>
+    <string name="piko_tor_download">Installer Piko Tor</string>
+    <string name="piko_tor_update">Mettre à jour Piko Tor</string>
+    <string name="piko_tor_install_instructions">Instructions d’installation</string>
+    <string name="piko_tor_download_warning">Installez Piko Tor expérimental 0.2 ou plus récent en suivant les instructions du projet. La version 0.1 est incompatible avec le mode réservé à X. Tor activé : seul X passe par Tor. Tor désactivé : X retrouve sa connexion normale, sauf si les paramètres VPN Android la bloquent. Android demande de confirmer l’installation. Aucun paramètre VPN n’est modifié automatiquement.</string>
+    <string name="piko_tor_download_failed">Impossible d’ouvrir les instructions d’installation. Consultez companion/README.md sur github.com/nassim-arifette/piko-tor. Piko Tor 0.2 ou plus récent est nécessaire.</string>
+    <string name="piko_tor_outdated">Compagnon installé incompatible : %s. Mettez-le à jour vers Piko Tor 0.2 ou plus récent pour activer et désactiver Tor uniquement pour X. Ces commandes n’ouvriront pas l’ancien compagnon.</string>
     <string name="piko_tor_installed">Compagnon installé : %s</string>
-    <string name="piko_tor_unverified">Protection non vérifiée dans X. Configurez le compagnon séparé et le VPN permanent Android avec blocage hors VPN. Expérimental ; absence de fuites non validée.</string>
-    <string name="piko_tor_missing">Compagnon non installé. Installez Piko Tor séparément ; ce patch seul ne redirige ni ne bloque le trafic.</string>
-    <string name="piko_tor_unsupported">Piko Tor nécessite Android 10 ou plus récent pour vérifier les paramètres de verrouillage réseau.</string>
+    <string name="piko_tor_unverified">Ouvrez le compagnon pour activer ou désactiver Tor pour X. Activé : seul X passe par Tor. Désactivé : X retrouve sa connexion normale. L’état n’est pas vérifié dans X. Si le tunnel VPN disparaît, X peut se connecter directement. Le blocage Android hors VPN est facultatif et peut bloquer les autres applications.</string>
+    <string name="piko_tor_missing">Compagnon non installé. Installez Piko Tor 0.2 ou plus récent séparément ; ce patch seul ne redirige ni ne bloque le trafic.</string>
+    <string name="piko_tor_unsupported">Piko Tor nécessite Android 10 ou plus récent.</string>
     <string name="piko_tor_open_failed">Impossible d’ouvrir Piko Tor. Vérifiez son installation puis ouvrez-le depuis le lanceur Android.</string>
     <!-- Settings Search -->
     <string name="piko_settings_search_hint">Rechercher des paramètres de Piko</string>

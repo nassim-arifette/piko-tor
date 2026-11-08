@@ -27,15 +27,23 @@ PIKO_DISPOSABLE_EMULATOR=1 python3 validation/android/run-network-checks.py \
   --output validation/android/artifacts
 ```
 
-The probe APK is independently debug-signed with a generated fixture key. The
-runner reads its actual installed signing digest and UID through instrumentation,
-checks that its UID differs from the companion, and seeds the companion's existing
+The target and control APKs contain the same probe DEX and use the same generated
+fixture signing key, but have distinct packages and Android UIDs. Fully qualified
+component names keep the control APK's instrumentation inside its own target
+package. The runner checks both installed identities and that all three UIDs
+differ, then seeds the companion's existing
 `tor_configuration` preferences using `run-as`. This deliberately tests network
-behavior, not the production pairing/consent UX. No account credentials are used.
+behavior, not the production pairing/consent UX. Only the target probe is paired;
+the control APK is never included in the VPN's allowed applications. No account
+credentials are used.
 
-The root-only emulator helper configures always-on and lockdown through the named
-`IVpnManager.setAlwaysOnVpnPackage` API and reads the state back. It does not guess
-Binder transaction numbers or merely edit settings without applying them. The
+The root-only emulator helper first grants ordinary VPN consent through the named
+`IVpnManager.prepareVpn` and `setVpnPackageAuthorization` APIs, following Android's
+`VpnService.prepareAndAuthorize`. Always-on and lockdown must both remain absent
+during this default per-app phase. The later, separate strict phase configures
+them through `IVpnManager.setAlwaysOnVpnPackage` and reads the state back. The
+helper does not guess Binder transaction numbers or merely edit settings without
+applying them. The
 method signatures were checked against
 [Android 15's interface](https://github.com/aosp-mirror/platform_frameworks_base/blob/android15-release/core/java/android/net/IVpnManager.aidl).
 The helper refuses to replace an existing different always-on provider. The runner
@@ -63,15 +71,47 @@ the process or sockets to a particular network.
    Runner listeners bind only host loopback ports 18080/18081. The independent
    IPv4 UID counter must show physical output. An unavailable required control
    makes the run incomplete, never a successful blocking test.
-2. **Real Tor path.** After VPN and lockdown configuration, the same probe must
-   receive HTTPS `IsTor=true`, establish IPv4 TCP and emit no target-UID packets on
-   physical interfaces. IPv6 availability is recorded separately. The JSON
-   preserves no source/exit IP, response body or account information.
-3. **Unsupported/local traffic.** Previously successful host TCP and UDP probes
+2. **Default per-app ON.** With ordinary VPN consent and neither always-on nor
+   lockdown, the selected probe must receive HTTPS `IsTor=true`, establish IPv4
+   and IPv6 TCP and emit no target-UID packets on physical interfaces. The separate
+   unselected UID must simultaneously receive `IsTor=false`, open direct IPv4 TCP,
+   receive host TCP/UDP echoes, and emit physical UID packets. A second target
+   Tor check and continued TUN presence guard against a VPN that stopped before
+   the control succeeded. Every HTTPS check uses a fresh nonce and disables caching.
+   The JSON preserves no source/exit IP, response body or account information.
+3. **Default per-app engine pause.** Strict Private DNS with a reserved `.invalid`
+   hostname stops the Tor engine through the existing refusal policy. The selected
+   UID's previously working literal IPv4/IPv6 TCP controls and local probes must
+   fail with the original TUN name and kernel ifindex retained, no host receipts
+   and no physical UID output. The unselected UID must still pass literal public
+   IPv4 TCP and host TCP/UDP with physical output. Its HTTPS hostname check is
+   deliberately omitted during the invalid global DNS configuration; it must
+   return `IsTor=false` again after DNS restoration. The target must recover Tor.
+4. **Default per-app process death.** The exact companion PID receives `kill -9`
+   while always-on and lockdown remain off. During a sampled TUN-absent interval,
+   the target must demonstrate fresh `IsTor=false` and direct TCP/UDP positive
+   controls. This records the expected exposure without system lockdown, not a
+   failed kill-switch assertion. Manual restart must recover Tor. If the tunnel
+   reappears during the measurement, the exact interval is inconclusive.
+5. **Default per-app OFF.** The runner clicks the companion's ordinary OFF button
+   and confirmation, verifies `requested=false` and TUN disappearance, then requires
+   the selected probe to receive a fresh `IsTor=false` response and successful
+   direct TCP/UDP positive controls. Always-on and lockdown must still be absent.
+   The unselected UID must also retain its direct positive controls after OFF.
+   Killing the service or changing system VPN policy is not used to simulate OFF.
+6. **Optional strict protection.** The runner explicitly enables always-on and
+   lockdown, restarts the companion, and verifies a real Tor HTTPS response and
+   target TCP controls without physical target-UID output. The following pause and
+   crash assertions apply to this optional configuration; they do not imply that
+   ordinary per-app mode blocks direct access after a process crash or TUN loss.
+   The unselected UID is checked separately and must be blocked, demonstrating
+   this system policy's effect on other applications. After strict-mode manual
+   recovery, ordinary OFF must leave both UIDs blocked while lockdown remains set.
+7. **Unsupported/local traffic.** Previously successful host TCP and UDP probes
    must fail under protection. The host must receive neither token, and physical
    target-UID counters must stay unchanged. This exercises a synthetic UDP
-   datagram, not a real QUIC stack.
-4. **Engine paused with the TUN retained.** Strict Private DNS with a reserved
+   datagram, not a real QUIC stack. This is checked in both ON configurations.
+8. **Optional strict engine pause with the TUN retained.** Strict Private DNS with a reserved
    `.invalid` hostname invokes the companion's existing refusal policy. Its
    visible pause state and unchanged TUN name **and kernel ifindex** are checked;
    recreating an interface under the same `tun0` name is not accepted as retaining
@@ -83,7 +123,7 @@ the process or sockets to a particular network.
    TCP/Tor engine. The runner keeps those test addresses only in memory.
    Restoring the original non-strict mode must recover a real Tor response.
    This is a policy-induced engine stop, not arbitrary native-fault injection.
-5. **Process killed / tunnel absent.** `kill -9` targets the exact companion PID.
+9. **Optional strict process killed / tunnel absent.** `kill -9` targets the exact companion PID.
    The runner waits for TUN disappearance, polls interface presence while probing,
    and verifies lockdown remains configured. Direct UID or host egress fails.
    If the TUN reappears during measurement, the exact tunnel-absent experiment is
@@ -92,7 +132,8 @@ the process or sockets to a particular network.
    claimed by that manual-recovery result.
 
 The counting chains contain counter-only rules and a `RETURN`; they add no
-`ACCEPT`, `DROP`, bypass or routing policy. They are scoped to the probe UID and
+`ACCEPT`, `DROP`, bypass or routing policy. Separate chains cover the target and
+control UIDs with
 unique chain names, with cleanup in `finally`. Logs store only sanitized results,
 counts, fixture hashes, UIDs and the emulator fingerprint. No packet capture,
 general logcat or HTTP body is retained.
@@ -111,7 +152,7 @@ inspection until its destruction.
 
 ## Limits
 
-The diagnostic UID is **not X**. This does not establish coverage of authenticated
+The diagnostic UIDs are **not X or the user's other apps**. This does not establish coverage of authenticated
 X, WebView/native/isolated processes, notifications, media, boot, network switching,
 physical OEM devices, battery restrictions or exhaustive UDP/IPv6 destinations.
 DNS answers can be cached; a lookup that succeeds while blocked is recorded but

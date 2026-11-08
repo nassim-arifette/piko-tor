@@ -95,7 +95,7 @@ public final class ProbeInstrumentation extends Instrumentation {
                 }
             } else if ("tor".equals(operation)) {
                 HttpsURLConnection connection = (HttpsURLConnection) new URL(
-                        "https://check.torproject.org/api/ip").openConnection();
+                        "https://check.torproject.org/api/ip?piko_nonce=" + java.util.UUID.randomUUID()).openConnection();
                 connection.setConnectTimeout(12000);
                 connection.setReadTimeout(12000);
                 connection.setUseCaches(false);
