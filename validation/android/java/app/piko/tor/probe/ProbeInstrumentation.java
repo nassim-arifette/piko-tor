@@ -45,6 +45,12 @@ public final class ProbeInstrumentation extends Instrumentation {
         long before = android.os.SystemClock.elapsedRealtime();
         try {
             result.put("operation", operation).put("uid", Process.myUid());
+            // onCreate().start() races ActivityThread's remaining application setup.
+            // Wait for that main-thread work; never bind sockets to a physical network.
+            waitForIdleSync();
+            result.put("startup_idle_ms", android.os.SystemClock.elapsedRealtime() - before);
+            result.put("startup_active_network", getTargetContext()
+                    .getSystemService(ConnectivityManager.class).getActiveNetwork() != null);
             if ("identity".equals(operation)) {
                 Context context = getTargetContext();
                 Signature[] signatures = context.getPackageManager().getPackageInfo(

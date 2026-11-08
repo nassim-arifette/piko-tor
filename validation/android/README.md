@@ -52,6 +52,10 @@ the probe's default-network capabilities, DNS-server count, default-route counts
 INTERNET permission and sanitized exception causes/errno values to diagnose
 emulator setup failures. Private DNS returns to `off` after the strict-DNS pause,
 and the runner restores the emulator's original settings during cleanup.
+Each instrumentation process waits for the application's main thread to become
+idle before probing, so the test does not race application initialization.
+It records that startup wait and default-network availability without binding
+the process or sockets to a particular network.
 
 1. **Direct positive controls.** The probe's own UID must reach the HTTPS Tor
    check and receive `IsTor=false`, resolve its name, open IPv4 TCP, and receive
